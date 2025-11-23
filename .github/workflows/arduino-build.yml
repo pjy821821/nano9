@@ -1,0 +1,110 @@
+name: Arduino Build and Release
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'arduino_ultrasonic/**'
+  pull_request:
+    paths:
+      - 'arduino_ultrasonic/**'
+  release:
+    types: [created]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Arduino CLI
+        uses: arduino/setup-arduino-cli@v1
+
+      - name: Install Arduino Uno R4 core
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install arduino:renesas_uno
+
+      - name: Compile Arduino sketch
+        run: |
+          arduino-cli compile --fqbn arduino:renesas_uno:minima \
+            --output-dir build \
+            --export-binaries \
+            arduino_ultrasonic/arduino_ultrasonic.ino
+
+      - name: List build files
+        run: ls -lah build/
+
+      - name: Rename firmware files
+        run: |
+          cd build
+          # .hex 파일 찾기 및 이름 변경
+          if [ -f *.hex ]; then
+            mv *.hex arduino_ultrasonic_uno_r4.hex
+          fi
+          # .bin 파일도 있다면 이름 변경
+          if [ -f *.bin ]; then
+            mv *.bin arduino_ultrasonic_uno_r4.bin
+          fi
+          # .elf 파일도 있다면 이름 변경
+          if [ -f *.elf ]; then
+            mv *.elf arduino_ultrasonic_uno_r4.elf
+          fi
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: arduino-firmware
+          path: |
+            build/*.hex
+            build/*.bin
+            build/*.elf
+          retention-days: 30
+
+      - name: Create build info
+        run: |
+          echo "Build Date: $(date)" > build/BUILD_INFO.txt
+          echo "Git Commit: ${{ github.sha }}" >> build/BUILD_INFO.txt
+          echo "Git Branch: ${{ github.ref_name }}" >> build/BUILD_INFO.txt
+          echo "Arduino Board: Arduino Uno R4 Minima" >> build/BUILD_INFO.txt
+          echo "FQBN: arduino:renesas_uno:minima" >> build/BUILD_INFO.txt
+
+      - name: Upload build info
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-info
+          path: build/BUILD_INFO.txt
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+
+    steps:
+      - name: Download firmware artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: arduino-firmware
+          path: firmware
+
+      - name: Download build info
+        uses: actions/download-artifact@v3
+        with:
+          name: build-info
+          path: firmware
+
+      - name: Upload firmware to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            firmware/*.hex
+            firmware/*.bin
+            firmware/*.elf
+            firmware/BUILD_INFO.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
