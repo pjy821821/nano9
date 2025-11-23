@@ -4,9 +4,25 @@
  *
  * 하드웨어:
  * - Arduino Uno R4
- * - TUSS4470 초음파 드라이버
+ * - TUSS4470 초음파 드라이버 (Transformer Drive)
  * - HDC1080 온습도 센서
  * - V40 AW14B 초음파 트랜스듀서 (40kHz)
+ *
+ * PCB Code: 250903JA0
+ *
+ * 핀 연결:
+ * HDC1080 (I2C):
+ *   - SDA -> A4 (D18)
+ *   - SCL -> A5 (D19)
+ *
+ * TUSS4470 (SPI):
+ *   - NCS  -> D10 (SS)
+ *   - SCLK -> D13 (SCK)
+ *   - SDI  -> D11 (MOSI)
+ *   - SDO  -> D12 (MISO)
+ *   - IO1  -> A1
+ *   - IO2  -> A2
+ *   - VOUT -> A0
  *
  * 작성자: Claude
  * 날짜: 2025-11-23
@@ -25,6 +41,7 @@ TUSS4470 ultrasonicSensor;
 #define MEASUREMENT_INTERVAL 500  // 측정 간격 (ms)
 #define MAX_DISTANCE 400          // 최대 측정 거리 (cm)
 #define MIN_DISTANCE 2            // 최소 측정 거리 (cm)
+#define MEASUREMENT_TIMEOUT 100   // 측정 타임아웃 (ms)
 
 // 전역 변수
 float temperature = 25.0;         // 온도 (°C)
@@ -42,15 +59,25 @@ void setup() {
   Serial.println("Arduino Uno R4 Ultrasonic Distance Meter");
   Serial.println("with Temperature & Humidity Compensation");
   Serial.println("========================================");
+  Serial.println("PCB Code: 250903JA0");
+  Serial.println("TUSS4470 Transformer Drive Mode");
   Serial.println();
 
   // HDC1080 초기화
   Serial.print("Initializing HDC1080 sensor... ");
   if (tempHumiditySensor.begin()) {
     Serial.println("OK");
+    // 초기 온습도 읽기
+    tempHumiditySensor.readTempHumidity(temperature, humidity);
+    Serial.print("  Initial Temp: ");
+    Serial.print(temperature, 2);
+    Serial.println(" °C");
+    Serial.print("  Initial Humidity: ");
+    Serial.print(humidity, 2);
+    Serial.println(" %");
   } else {
     Serial.println("FAILED");
-    Serial.println("Please check I2C connections!");
+    Serial.println("ERROR: Check I2C connections (SDA=A4, SCL=A5)");
     while (1) {
       delay(1000);
     }
@@ -60,9 +87,12 @@ void setup() {
   Serial.print("Initializing TUSS4470 driver... ");
   if (ultrasonicSensor.begin()) {
     Serial.println("OK");
+    Serial.println("  Mode: Transformer Drive");
+    Serial.println("  Frequency: 40kHz (V40 AW14B)");
+    Serial.println("  SPI: NCS=D10, SCLK=D13, MOSI=D11, MISO=D12");
   } else {
     Serial.println("FAILED");
-    Serial.println("Please check SPI connections!");
+    Serial.println("ERROR: Check SPI connections and power");
     while (1) {
       delay(1000);
     }
@@ -75,8 +105,8 @@ void setup() {
   delay(2000);
 
   // 컬럼 헤더 출력
-  Serial.println("Time(ms)\tTemp(°C)\tHumidity(%)\tSpeed(cm/s)\tDistance(cm)\tStatus");
-  Serial.println("------------------------------------------------------------------------");
+  Serial.println("Time(ms)\tTemp(°C)\tHumidity(%)\tSpeed(cm/s)\tTOF(ns)\t\tDistance(cm)\tStatus");
+  Serial.println("--------------------------------------------------------------------------------------------");
 }
 
 void loop() {
@@ -92,33 +122,22 @@ void loop() {
     // 2. 음속 계산 (온도와 습도 보정 적용)
     speedOfSound = calculateSpeedOfSound(temperature, humidity);
 
-    // 3. 초음파 측정 트리거
-    ultrasonicSensor.trigger();
+    // 3. 초음파 측정 시작
+    ultrasonicSensor.startMeasurement();
 
     // 4. 측정 완료 대기
     unsigned long timeout = millis();
-    while (!ultrasonicSensor.isReady()) {
-      if (millis() - timeout > 100) { // 100ms 타임아웃
-        Serial.print(currentMillis);
-        Serial.print("\t");
-        Serial.print(temperature, 2);
-        Serial.print("\t\t");
-        Serial.print(humidity, 2);
-        Serial.print("\t\t");
-        Serial.print(speedOfSound, 2);
-        Serial.print("\t\t");
-        Serial.print("---");
-        Serial.print("\t\t");
-        Serial.println("TIMEOUT");
-        return;
+    bool measurementComplete = false;
+
+    while ((millis() - timeout) < MEASUREMENT_TIMEOUT) {
+      if (ultrasonicSensor.isMeasurementReady()) {
+        measurementComplete = true;
+        break;
       }
       delayMicroseconds(100);
     }
 
-    // 5. 거리 계산
-    float distance = ultrasonicSensor.getDistance(speedOfSound);
-
-    // 6. 결과 출력
+    // 5. 결과 출력
     Serial.print(currentMillis);
     Serial.print("\t\t");
     Serial.print(temperature, 2);
@@ -128,20 +147,42 @@ void loop() {
     Serial.print(speedOfSound, 2);
     Serial.print("\t\t");
 
-    // 거리 유효성 검사
-    if (distance >= MIN_DISTANCE && distance <= MAX_DISTANCE) {
+    if (measurementComplete) {
+      // TOF 및 거리 계산
+      uint32_t tof_ns = ultrasonicSensor.getTimeOfFlight();
+      float distance = ultrasonicSensor.getDistance(speedOfSound);
+
+      Serial.print(tof_ns);
+      Serial.print("\t\t");
       Serial.print(distance, 2);
       Serial.print("\t\t");
-      Serial.println("OK");
-    } else if (distance < MIN_DISTANCE) {
-      Serial.print(distance, 2);
-      Serial.print("\t\t");
-      Serial.println("TOO CLOSE");
+
+      // 에러 플래그 확인
+      uint8_t errors = ultrasonicSensor.getErrorFlags();
+      if (errors != 0) {
+        Serial.print("ERROR:0x");
+        Serial.println(errors, HEX);
+      }
+      // 거리 유효성 검사
+      else if (distance >= MIN_DISTANCE && distance <= MAX_DISTANCE) {
+        Serial.println("OK");
+      } else if (distance < MIN_DISTANCE) {
+        Serial.println("TOO CLOSE");
+      } else {
+        Serial.println("OUT OF RANGE");
+      }
     } else {
-      Serial.print(distance, 2);
+      Serial.print("---");
       Serial.print("\t\t");
-      Serial.println("OUT OF RANGE");
+      Serial.print("---");
+      Serial.print("\t\t");
+      Serial.println("TIMEOUT");
     }
+  }
+
+  // 시리얼 명령어 처리
+  if (Serial.available()) {
+    serialEvent();
   }
 }
 
@@ -152,35 +193,33 @@ void loop() {
  * @param hum 상대습도 (%)
  * @return 음속 (cm/s)
  *
- * 사용된 공식:
- * 1. 건조 공기에서의 음속 (Laplace-Newton 공식):
- *    v = 331.3 * sqrt(1 + T/273.15)
+ * 사용된 공식 (간소화된 선형 근사):
+ *   v = 331.3 + 0.606 * T + 0.0124 * RH (m/s)
  *
- * 2. 습도 보정 (간소화된 근사):
- *    v_corrected = v_dry * (1 + 0.0016 * humidity)
- *
- * 또는 더 간단한 선형 근사:
- *    v = 331.3 + 0.606 * T + 0.0124 * RH (m/s)
+ * 더 정확한 공식:
+ *   v = 331.3 * sqrt(1 + T/273.15) * (1 + 0.0016 * RH)
  */
 float calculateSpeedOfSound(float temp, float hum) {
-  // 방법 1: 정확한 계산
+  // 간소화된 선형 근사 (빠른 계산)
+  float v_ms = 331.3 + (0.606 * temp) + (0.0124 * hum);
+  return v_ms * 100.0; // m/s to cm/s
+
+  // 또는 더 정확한 계산 (선택)
   // float tempK = temp + 273.15;
   // float v_dry = 331.3 * sqrt(1.0 + temp / 273.15);
   // float v_corrected = v_dry * (1.0 + 0.0016 * hum);
   // return v_corrected * 100.0; // m/s to cm/s
-
-  // 방법 2: 간소화된 선형 근사 (계산 속도가 빠름)
-  float v_ms = 331.3 + (0.606 * temp) + (0.0124 * hum);
-  return v_ms * 100.0; // m/s to cm/s
 }
 
 /**
- * 시리얼 명령어 처리 (선택사항)
+ * 시리얼 명령어 처리
  *
  * 사용 가능한 명령어:
  * - 'i': 현재 정보 출력
  * - 's': 단일 측정
  * - 'c': 보정 정보 출력
+ * - 'r': 레지스터 정보 출력 (디버깅)
+ * - 'v': VOUT 전압 출력
  */
 void serialEvent() {
   while (Serial.available()) {
@@ -202,16 +241,29 @@ void serialEvent() {
         printCalibrationInfo();
         break;
 
+      case 'r':
+      case 'R':
+        printRegisterInfo();
+        break;
+
+      case 'v':
+      case 'V':
+        printVoutInfo();
+        break;
+
       case '\n':
       case '\r':
         // 개행 문자 무시
         break;
 
       default:
-        Serial.println("Unknown command. Available commands:");
+        Serial.println("\n=== Available Commands ===");
         Serial.println("  i - System information");
         Serial.println("  s - Single measurement");
         Serial.println("  c - Calibration information");
+        Serial.println("  r - Register information (debug)");
+        Serial.println("  v - VOUT voltage");
+        Serial.println("==========================\n");
         break;
     }
   }
@@ -221,9 +273,14 @@ void printSystemInfo() {
   Serial.println("\n========== System Information ==========");
   Serial.println("Hardware:");
   Serial.println("  - Arduino Uno R4");
-  Serial.println("  - TUSS4470 Ultrasonic Driver");
+  Serial.println("  - TUSS4470 Ultrasonic Driver (Transformer Drive)");
   Serial.println("  - HDC1080 Temperature & Humidity Sensor");
   Serial.println("  - V40 AW14B Ultrasonic Transducer (40kHz)");
+  Serial.println("  - PCB Code: 250903JA0");
+  Serial.println("\nPin Configuration:");
+  Serial.println("  HDC1080: SDA=A4, SCL=A5");
+  Serial.println("  TUSS4470: NCS=D10, SCLK=D13, MOSI=D11, MISO=D12");
+  Serial.println("            IO1=A1, IO2=A2, VOUT=A0");
   Serial.println("\nCurrent Status:");
   Serial.print("  Temperature: ");
   Serial.print(temperature, 2);
@@ -255,16 +312,26 @@ void performSingleMeasurement() {
   Serial.print(speedOfSound, 2);
   Serial.println(" cm/s");
 
-  ultrasonicSensor.trigger();
+  ultrasonicSensor.startMeasurement();
   delay(50);
 
-  if (ultrasonicSensor.isReady()) {
+  if (ultrasonicSensor.isMeasurementReady()) {
+    uint32_t tof_ns = ultrasonicSensor.getTimeOfFlight();
     float distance = ultrasonicSensor.getDistance(speedOfSound);
+
+    Serial.print("Time of Flight: ");
+    Serial.print(tof_ns);
+    Serial.println(" ns");
+
     Serial.print("Distance: ");
     Serial.print(distance, 2);
     Serial.println(" cm");
+
+    uint8_t errors = ultrasonicSensor.getErrorFlags();
+    Serial.print("Error Flags: 0x");
+    Serial.println(errors, HEX);
   } else {
-    Serial.println("Measurement timeout!");
+    Serial.println("ERROR: Measurement timeout!");
   }
 
   Serial.println("--------------------------\n");
@@ -283,6 +350,12 @@ void printCalibrationInfo() {
   Serial.println("    v = Speed of sound (cm/s)");
   Serial.println("    t = Time of flight (s)");
   Serial.println("    d = Distance (cm)");
+  Serial.println("\nTUSS4470 Configuration:");
+  Serial.println("  - Driver Mode: Transformer Drive");
+  Serial.println("  - Burst Pulses: 8");
+  Serial.println("  - Frequency: 40kHz");
+  Serial.println("  - Averages: 4");
+  Serial.println("  - TOF Clock: 8MHz (125ns resolution)");
   Serial.println("\nMeasurement Range:");
   Serial.print("  Minimum: ");
   Serial.print(MIN_DISTANCE);
@@ -291,4 +364,56 @@ void printCalibrationInfo() {
   Serial.print(MAX_DISTANCE);
   Serial.println(" cm");
   Serial.println("=============================================\n");
+}
+
+void printRegisterInfo() {
+  Serial.println("\n========== TUSS4470 Register Dump ==========");
+
+  Serial.print("DEV_STAT0:   0x");
+  Serial.println(ultrasonicSensor.readRegister(0x00), HEX);
+
+  Serial.print("DEV_STAT1:   0x");
+  Serial.println(ultrasonicSensor.readRegister(0x01), HEX);
+
+  Serial.print("DEV_CTRL0:   0x");
+  Serial.println(ultrasonicSensor.readRegister(0x05), HEX);
+
+  Serial.print("DEV_CTRL1:   0x");
+  Serial.println(ultrasonicSensor.readRegister(0x06), HEX);
+
+  Serial.print("DEV_CTRL2:   0x");
+  Serial.println(ultrasonicSensor.readRegister(0x07), HEX);
+
+  Serial.print("DEV_CTRL3:   0x");
+  Serial.println(ultrasonicSensor.readRegister(0x08), HEX);
+
+  Serial.print("DEV_CTRL4:   0x");
+  Serial.println(ultrasonicSensor.readRegister(0x09), HEX);
+
+  Serial.print("ERROR_FLAGS: 0x");
+  Serial.println(ultrasonicSensor.readRegister(0x0D), HEX);
+
+  Serial.print("NUM_AVG:     0x");
+  Serial.println(ultrasonicSensor.readRegister(0x0F), HEX);
+
+  Serial.print("REC_LENGTH:  0x");
+  Serial.println(ultrasonicSensor.readRegister(0x10), HEX);
+
+  Serial.println("============================================\n");
+}
+
+void printVoutInfo() {
+  Serial.println("\n--- VOUT Information ---");
+
+  uint16_t vout_raw = ultrasonicSensor.getVoutRaw();
+  float vout_voltage = ultrasonicSensor.getVoutVoltage();
+
+  Serial.print("VOUT Raw (ADC): ");
+  Serial.println(vout_raw);
+
+  Serial.print("VOUT Voltage: ");
+  Serial.print(vout_voltage, 3);
+  Serial.println(" V");
+
+  Serial.println("------------------------\n");
 }
