@@ -1,11 +1,13 @@
 import {
   GRID_SIZE, CELL, GRID_X, GRID_Y, TRAY_Y, TRAY_SCALE, GAME_WIDTH, GAME_HEIGHT,
-  COLORS, PIECE_COLORS, SCORE_PER_CELL, SCORE_PER_LINE, COMBO_BONUS, STORAGE_KEY, TUTORIAL_KEY,
+  COLORS, PIECE_COLORS, SCORE_PER_CELL, SCORE_PER_LINE, COMBO_BONUS, CLEAR_WORDS,
+  STORAGE_KEY, TUTORIAL_KEY, FONT_DISPLAY, FONT_UI,
 } from '../config.js';
 import { randomShape, shapeBounds } from '../shapes.js';
 import { Board } from '../board.js';
 import { Ads } from '../ads.js';
 import { sfx, haptic } from '../audio.js';
+import { makeHanjiTexture, makeScrapTexture, drawPatch, drawEmptyCell, drawBoardFrame, makeSeal } from '../art.js';
 
 const TRAY_SLOTS = 3;
 const TRAY_SLOT_X = [GAME_WIDTH * 0.2, GAME_WIDTH * 0.5, GAME_WIDTH * 0.8];
@@ -28,20 +30,15 @@ export class GameScene extends Phaser.Scene {
     this.isGameOver = false;
     this.moves = 0;
 
-    this.makeTextures();
+    makeHanjiTexture(this);
+    makeScrapTexture(this);
+    this.add.image(0, 0, 'hanji').setOrigin(0).setDepth(-10);
     this.drawStaticGrid();
     this.flash = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0xffffff, 0).setOrigin(0).setDepth(40);
     this.cellSprites = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(null));
     this.ghost = this.add.graphics().setDepth(5);
 
-    this.scoreText = this.add.text(GAME_WIDTH / 2, 110, '0', {
-      fontFamily: 'Arial Black, sans-serif', fontSize: '84px', color: COLORS.text,
-    }).setOrigin(0.5);
-    this.bestText = this.add.text(GAME_WIDTH / 2, 180, `BEST ${this.best}`, {
-      fontFamily: 'Arial, sans-serif', fontSize: '30px', color: COLORS.textDim,
-    }).setOrigin(0.5);
-
-    this.createHud();
+    this.createHeader();
 
     this.tray = [null, null, null];
     this.refillTray();
@@ -50,8 +47,20 @@ export class GameScene extends Phaser.Scene {
     if (!this.tutorialDone()) this.startTutorial();
   }
 
-  // ---------- HUD (음소거, 되돌리기) ----------
-  createHud() {
+  // ---------- 상단: 제목, 낙관, 점수, HUD ----------
+  createHeader() {
+    this.add.text(GAME_WIDTH / 2 - 30, 48, '조각보', {
+      fontFamily: FONT_DISPLAY, fontSize: '46px', color: COLORS.ink, fontStyle: 'bold',
+    }).setOrigin(0.5);
+    makeSeal(this, GAME_WIDTH / 2 + 70, 46, '조각\n보', 52).setDepth(1);
+
+    this.scoreText = this.add.text(GAME_WIDTH / 2, 128, '0', {
+      fontFamily: FONT_DISPLAY, fontSize: '86px', color: COLORS.ink, fontStyle: 'bold',
+    }).setOrigin(0.5);
+    this.bestText = this.add.text(GAME_WIDTH / 2, 196, `최고 ${this.best}`, {
+      fontFamily: FONT_UI, fontSize: '28px', color: COLORS.textDim,
+    }).setOrigin(0.5);
+
     this.muteBtn = this.iconButton(GAME_WIDTH - 70, 70, sfx.muted ? '🔇' : '🔊', () => {
       const m = sfx.toggleMute();
       this.muteBtn.label.setText(m ? '🔇' : '🔊');
@@ -64,20 +73,23 @@ export class GameScene extends Phaser.Scene {
       if (!ok) return;
       this.performUndo();
     });
-    this.undoBtn.badge = this.add.text(70, 108, 'AD', {
-      fontFamily: 'Arial Black, sans-serif', fontSize: '16px', color: '#102030', backgroundColor: '#ffd166', padding: { x: 6, y: 2 },
+    this.undoBtn.badge = this.add.text(70, 110, '광고', {
+      fontFamily: FONT_UI, fontSize: '16px', color: '#f3e9d6', backgroundColor: '#d9463b', padding: { x: 7, y: 2 },
     }).setOrigin(0.5).setDepth(51);
     this.refreshUndoButton();
   }
 
   iconButton(x, y, label, onClick) {
     const c = this.add.container(x, y).setDepth(50);
-    const bg = this.add.circle(0, 0, 36, 0x2a2f55, 1);
-    const t = this.add.text(0, 0, label, { fontSize: '36px', color: COLORS.text }).setOrigin(0.5);
+    const bg = this.add.graphics();
+    bg.fillStyle(COLORS.frameDark, 1); bg.fillCircle(2, 3, 36);
+    bg.fillStyle(COLORS.frame, 1); bg.fillCircle(0, 0, 36);
+    bg.lineStyle(1.5, 0xf3e9d6, 0.5); bg.strokeCircle(0, 0, 30);
+    const t = this.add.text(0, 0, label, { fontSize: '34px', color: COLORS.textOnFrame }).setOrigin(0.5);
     c.add([bg, t]);
     c.label = t;
     c.setSize(72, 72);
-    // 컨테이너 히트 영역 원점은 크기 상자 좌상단 (위 makePiece 주석 참고)
+    // 컨테이너 히트 영역 원점은 setSize 상자의 좌상단 (makePiece 주석 참고)
     c.setInteractive(new Phaser.Geom.Rectangle(-4, -4, 80, 80), Phaser.Geom.Rectangle.Contains);
     c.on('pointerdown', () => {
       sfx.unlock(); sfx.button(); haptic.light();
@@ -93,33 +105,18 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ---------- 렌더링 ----------
-  makeTextures() {
-    if (this.textures.exists('px')) return;
-    const g = this.make.graphics({ x: 0, y: 0, add: false });
-    g.fillStyle(0xffffff, 1);
-    g.fillRoundedRect(0, 0, 16, 16, 4);
-    g.generateTexture('px', 16, 16);
-    g.destroy();
-  }
-
   drawStaticGrid() {
     const g = this.add.graphics();
-    g.fillStyle(0x151833, 1);
-    g.fillRoundedRect(GRID_X - 12, GRID_Y - 12, GRID_SIZE * CELL + 24, GRID_SIZE * CELL + 24, 18);
-    for (let r = 0; r < GRID_SIZE; r++) {
-      for (let c = 0; c < GRID_SIZE; c++) {
-        g.fillStyle(COLORS.cellEmpty, 1);
-        g.fillRoundedRect(GRID_X + c * CELL + 3, GRID_Y + r * CELL + 3, CELL - 6, CELL - 6, 8);
-      }
-    }
+    drawBoardFrame(g, GRID_X, GRID_Y, GRID_SIZE * CELL);
+    for (let r = 0; r < GRID_SIZE; r++)
+      for (let c = 0; c < GRID_SIZE; c++)
+        drawEmptyCell(g, GRID_X + c * CELL, GRID_Y + r * CELL, CELL);
   }
 
-  cellRect(color, x, y, size, alpha = 1) {
+  // 천 조각 한 칸을 Graphics로 그려 돌려줍니다. (x, y)는 칸의 좌상단.
+  cellRect(color, x, y, size) {
     const g = this.add.graphics();
-    g.fillStyle(color, alpha);
-    g.fillRoundedRect(x + 3, y + 3, size - 6, size - 6, 8);
-    g.fillStyle(0xffffff, 0.18 * alpha);
-    g.fillRoundedRect(x + 8, y + 8, size - 16, (size - 16) * 0.35, 6);
+    drawPatch(g, color, x, y, size);
     return g;
   }
 
@@ -218,11 +215,11 @@ export class GameScene extends Phaser.Scene {
     if (!pos) return;
     const { shape } = obj.data.values;
     const ok = this.board.canPlace(shape, pos.row, pos.col);
-    this.ghost.fillStyle(ok ? COLORS.ghostOk : COLORS.ghostBad, 0.35);
+    this.ghost.fillStyle(ok ? COLORS.ghostOk : COLORS.ghostBad, 0.4);
     for (const [r, c] of shape) {
       const rr = pos.row + r, cc = pos.col + c;
       if (rr < 0 || cc < 0 || rr >= GRID_SIZE || cc >= GRID_SIZE) continue;
-      this.ghost.fillRoundedRect(GRID_X + cc * CELL + 3, GRID_Y + rr * CELL + 3, CELL - 6, CELL - 6, 8);
+      this.ghost.fillRoundedRect(GRID_X + cc * CELL + 3, GRID_Y + rr * CELL + 3, CELL - 6, CELL - 6, 6);
     }
   }
 
@@ -242,14 +239,15 @@ export class GameScene extends Phaser.Scene {
 
     const { lines, cleared } = this.board.clearLines();
     if (lines > 0) {
-      const origin = { x: GRID_X + (col + shapeBounds(shape).cols / 2) * CELL, y: GRID_Y + (row + shapeBounds(shape).rows / 2) * CELL };
+      const b = shapeBounds(shape);
+      const origin = { x: GRID_X + (col + b.cols / 2) * CELL, y: GRID_Y + (row + b.rows / 2) * CELL };
       this.animateClear(cleared, origin, lines);
       let gain = lines * SCORE_PER_LINE;
       if (lines >= 2) gain += lines * COMBO_BONUS;
       this.time.delayedCall(120, () => this.addScore(gain));
       sfx.clear(lines); haptic.success(lines);
       this.popScore(gain, origin, lines);
-      this.popText(lines >= 2 ? `COMBO x${lines}!` : 'LINE!', lines >= 2 ? COLORS.accent : '#7fe3a5', lines);
+      this.popText(CLEAR_WORDS[Math.min(lines, CLEAR_WORDS.length) - 1], lines >= 2 ? COLORS.accent : '#2b6cb0', lines);
       this.cameras.main.shake(140 + 40 * lines, 0.006 + 0.004 * lines);
       if (lines >= 2) this.screenFlash(0.18 + 0.08 * Math.min(lines, 4));
     }
@@ -272,10 +270,10 @@ export class GameScene extends Phaser.Scene {
     this.undoUsed = true;
     this.moves = Math.max(0, this.moves - 1);
     this.refreshUndoButton();
-    this.popText('UNDO', COLORS.accent);
+    this.popText('되돌리기', COLORS.accent);
   }
 
-  // 놓은 위치에서 바깥으로 퍼지는 파동 순서로 셀이 하얗게 번쩍인 뒤 터지며 파티클을 뿌립니다.
+  // 놓은 위치에서 바깥으로 퍼지는 파동 순서로 셀이 하얗게 번쩍인 뒤 터지며 천 조각 파편을 뿌립니다.
   animateClear(cells, origin, lines) {
     for (const [r, c] of cells) {
       const spr = this.cellSprites[r][c];
@@ -286,32 +284,30 @@ export class GameScene extends Phaser.Scene {
       const delay = Math.min(220, dist * 0.35);
       const color = spr.colorValue || 0xffffff;
 
-      // 흰색 플래시 타일
-      const white = this.add.image(cx, cy, 'px').setDisplaySize(CELL - 6, CELL - 6).setDepth(6).setAlpha(0);
+      const white = this.add.image(cx, cy, 'scrap').setDisplaySize(CELL - 6, CELL - 6).setDepth(6).setAlpha(0);
       this.tweens.add({ targets: white, alpha: { from: 0, to: 1 }, duration: 60, delay, yoyo: true, hold: 40, onComplete: () => white.destroy() });
 
-      // 본체: 커졌다가 사라짐
       this.tweens.add({
         targets: spr, delay, duration: 220, ease: 'Cubic.Out',
         alpha: 0, scaleX: 1.35, scaleY: 1.35, x: -(cx - GRID_X - c * CELL) * 0.35, y: -(cy - GRID_Y - r * CELL) * 0.35,
         onComplete: () => spr.destroy(),
       });
 
-      // 파편 파티클
       this.time.delayedCall(delay + 40, () => {
-        const emitter = this.add.particles(cx, cy, 'px', {
+        const emitter = this.add.particles(cx, cy, 'scrap', {
           speed: { min: 120, max: 320 + 60 * lines },
           angle: { min: 0, max: 360 },
-          scale: { start: 0.9, end: 0 },
+          rotate: { min: 0, max: 360 },
+          scale: { start: 1, end: 0.2 },
           alpha: { start: 1, end: 0 },
-          lifespan: { min: 300, max: 550 },
-          gravityY: 500,
-          tint: [color, 0xffffff],
+          lifespan: { min: 350, max: 650 },
+          gravityY: 600,
+          tint: [color, 0xf3e9d6, color],
           quantity: 6 + 2 * lines,
           emitting: false,
         }).setDepth(35);
         emitter.explode();
-        this.time.delayedCall(700, () => emitter.destroy());
+        this.time.delayedCall(800, () => emitter.destroy());
       });
     }
   }
@@ -323,8 +319,8 @@ export class GameScene extends Phaser.Scene {
 
   popScore(gain, origin, lines) {
     const t = this.add.text(origin.x, origin.y, `+${gain}`, {
-      fontFamily: 'Arial Black, sans-serif', fontSize: `${44 + 8 * Math.min(lines, 4)}px`, color: '#ffffff',
-      stroke: '#1b1f3a', strokeThickness: 8,
+      fontFamily: FONT_DISPLAY, fontStyle: 'bold', fontSize: `${44 + 8 * Math.min(lines, 4)}px`, color: '#f3e9d6',
+      stroke: '#24375c', strokeThickness: 8,
     }).setOrigin(0.5).setDepth(36).setScale(0.4);
     this.tweens.add({ targets: t, scale: 1, duration: 160, ease: 'Back.Out' });
     this.tweens.add({ targets: t, y: origin.y - 140, alpha: 0, duration: 800, delay: 250, ease: 'Quad.In', onComplete: () => t.destroy() });
@@ -336,16 +332,16 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: this.scoreText, scale: 1.15, duration: 80, yoyo: true });
     if (this.score > this.best) {
       this.best = this.score;
-      this.bestText.setText(`BEST ${this.best}`);
+      this.bestText.setText(`최고 ${this.best}`);
       this.saveBest(this.best);
     }
   }
 
   popText(msg, color, lines = 1) {
-    const size = 64 + 12 * Math.min(Math.max(lines - 1, 0), 4);
+    const size = 60 + 12 * Math.min(Math.max(lines - 1, 0), 4);
     const t = this.add.text(GAME_WIDTH / 2, GRID_Y - 60, msg, {
-      fontFamily: 'Arial Black, sans-serif', fontSize: `${size}px`, color,
-      stroke: '#1b1f3a', strokeThickness: 10,
+      fontFamily: FONT_DISPLAY, fontStyle: 'bold', fontSize: `${size}px`, color,
+      stroke: '#f3e9d6', strokeThickness: 10,
     }).setOrigin(0.5).setDepth(45).setScale(0.3).setAngle(-6 + Math.random() * 12);
     this.tweens.add({ targets: t, scale: 1.1, duration: 180, ease: 'Back.Out' });
     this.tweens.add({ targets: t, scale: 1, duration: 120, delay: 180 });
@@ -371,7 +367,6 @@ export class GameScene extends Phaser.Scene {
     this.stopTutorialHand();
   }
 
-  // 대기열 첫 조각을 집어 보드에 놓을 수 있는 첫 위치로 움직이는 손가락 애니메이션
   startTutorial() {
     this.stopTutorialHand();
     const piece = this.tray.find(p => p);
@@ -386,8 +381,8 @@ export class GameScene extends Phaser.Scene {
     const tx = GRID_X + target.c * CELL + (cols * CELL) / 2;
     const ty = GRID_Y + target.r * CELL + (rows * CELL) / 2 + DRAG_LIFT;
 
-    this.tutorialHint = this.add.text(GAME_WIDTH / 2, GRID_Y - 40, '조각을 끌어서 보드에 놓으세요', {
-      fontFamily: 'Arial, sans-serif', fontSize: '28px', color: COLORS.accent,
+    this.tutorialHint = this.add.text(GAME_WIDTH / 2, GRID_Y - 28, '천 조각을 끌어다 보에 붙여 보세요', {
+      fontFamily: FONT_UI, fontSize: '26px', color: COLORS.accent,
     }).setOrigin(0.5).setDepth(60);
 
     this.tutorialHand = this.add.text(piece.x, piece.y + 30, '👆', { fontSize: '72px' }).setOrigin(0.5, 0).setDepth(60);
@@ -415,20 +410,24 @@ export class GameScene extends Phaser.Scene {
   // ---------- 게임오버 / 수익화 지점 ----------
   showGameOver() {
     const ui = this.add.container(0, 0).setDepth(100);
-    const dim = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.65).setOrigin(0);
+    const dim = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x2a2320, 0.55).setOrigin(0);
     const panel = this.add.graphics();
-    panel.fillStyle(0x242a4d, 1);
+    panel.fillStyle(COLORS.frameDark, 1);
+    panel.fillRoundedRect(64, 386, GAME_WIDTH - 120, 520, 28);
+    panel.fillStyle(COLORS.frame, 1);
     panel.fillRoundedRect(60, 380, GAME_WIDTH - 120, 520, 28);
-    const title = this.add.text(GAME_WIDTH / 2, 450, '더 놓을 곳이 없어요', {
-      fontFamily: 'Arial Black, sans-serif', fontSize: '44px', color: COLORS.text,
+    panel.lineStyle(1.5, 0xf3e9d6, 0.4);
+    panel.strokeRoundedRect(74, 394, GAME_WIDTH - 148, 492, 20);
+    const title = this.add.text(GAME_WIDTH / 2, 452, '더 붙일 자리가 없어요', {
+      fontFamily: FONT_DISPLAY, fontStyle: 'bold', fontSize: '44px', color: COLORS.textOnFrame,
     }).setOrigin(0.5);
     const scoreLine = this.add.text(GAME_WIDTH / 2, 530, `점수 ${this.score}   최고 ${this.best}`, {
-      fontFamily: 'Arial, sans-serif', fontSize: '32px', color: COLORS.textDim,
+      fontFamily: FONT_UI, fontSize: '30px', color: '#cdbb9c',
     }).setOrigin(0.5);
     ui.add([dim, panel, title, scoreLine]);
 
     if (!this.continueUsed && Ads.rewardedReady()) {
-      ui.add(this.makeButton(GAME_WIDTH / 2, 640, '▶ 광고 보고 이어하기', 0x06d6a0, async () => {
+      ui.add(this.makeButton(GAME_WIDTH / 2, 640, '▶ 광고 보고 이어 짓기', 0x6b8e4e, async () => {
         const ok = await Ads.showRewarded();
         if (!ok) return;
         this.continueUsed = true;
@@ -442,7 +441,7 @@ export class GameScene extends Phaser.Scene {
       }));
     }
 
-    ui.add(this.makeButton(GAME_WIDTH / 2, 760, '다시 시작', 0x4cc9f0, async () => {
+    ui.add(this.makeButton(GAME_WIDTH / 2, 760, '새 보 짓기', 0xe8b63a, async () => {
       if (this.gameOverCount % 3 === 0) await Ads.showInterstitial();
       this.scene.restart();
     }));
@@ -451,9 +450,10 @@ export class GameScene extends Phaser.Scene {
   makeButton(x, y, label, color, onClick) {
     const c = this.add.container(x, y);
     const bg = this.add.graphics();
-    bg.fillStyle(color, 1);
-    bg.fillRoundedRect(-240, -44, 480, 88, 22);
-    const t = this.add.text(0, 0, label, { fontFamily: 'Arial Black, sans-serif', fontSize: '34px', color: '#102030' }).setOrigin(0.5);
+    bg.fillStyle(0x000000, 0.25); bg.fillRoundedRect(-238, -40, 480, 88, 22);
+    bg.fillStyle(color, 1); bg.fillRoundedRect(-240, -44, 480, 88, 22);
+    bg.lineStyle(1.5, 0xf3e9d6, 0.6); bg.strokeRoundedRect(-232, -36, 464, 72, 16);
+    const t = this.add.text(0, 0, label, { fontFamily: FONT_UI, fontSize: '32px', color: '#1d1a17' }).setOrigin(0.5);
     c.add([bg, t]);
     c.setSize(480, 88);
     c.setInteractive(new Phaser.Geom.Rectangle(0, 0, 480, 88), Phaser.Geom.Rectangle.Contains);

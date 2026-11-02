@@ -1,6 +1,6 @@
 // 효과음: 외부 파일 없이 Web Audio API로 합성합니다.
 // 첫 터치 이후에만 AudioContext가 활성화되므로 unlock()을 입력 이벤트에서 호출합니다.
-const MUTE_KEY = 'blockdrop.muted';
+import { MUTE_KEY } from './config.js';
 
 class Sfx {
   constructor() {
@@ -43,8 +43,9 @@ class Sfx {
     osc.stop(t0 + dur + 0.02);
   }
 
-  pickup() { this.tone(520, 0.06, { type: 'triangle', vol: 0.15 }); }
-  place() { this.tone(300, 0.08, { type: 'square', vol: 0.12, slide: 180 }); }
+  pickup() { this.tone(587, 0.06, { type: 'triangle', vol: 0.15 }); }
+  // 목탁처럼 짧고 둥근 '톡'
+  place() { this.tone(820, 0.07, { type: 'sine', vol: 0.3, slide: 420 }); this.noise(0.04, { vol: 0.08 }); }
   reject() { this.tone(160, 0.12, { type: 'sawtooth', vol: 0.08, slide: 120 }); }
 
   noise(dur, { vol = 0.2, delay = 0 } = {}) {
@@ -70,7 +71,8 @@ class Sfx {
     this.tone(140, 0.22, { type: 'sine', vol: 0.5, slide: 40 });
     this.noise(0.25, { vol: 0.25 });
     // 2) 줄 수만큼 음을 올려가며 아르페지오 (콤보일수록 길고 높게)
-    const base = [523, 659, 784, 1047, 1319, 1568];
+    // 국악 5음계(황종·태주·중려·임종·남려)에 가까운 C D F G A 펜타토닉
+    const base = [523, 587, 698, 784, 880, 1047];
     const n = Math.min(lines + 2, base.length);
     for (let i = 0; i < n; i++) {
       this.tone(base[i], 0.22, { type: 'triangle', vol: 0.22, delay: 0.05 + i * 0.055 });
@@ -81,9 +83,10 @@ class Sfx {
   }
 
   gameOver() {
-    this.tone(392, 0.25, { type: 'triangle', vol: 0.2 });
-    this.tone(330, 0.25, { type: 'triangle', vol: 0.2, delay: 0.2 });
-    this.tone(262, 0.45, { type: 'triangle', vol: 0.2, delay: 0.4 });
+    this.tone(440, 0.25, { type: 'triangle', vol: 0.2 });
+    this.tone(392, 0.25, { type: 'triangle', vol: 0.2, delay: 0.2 });
+    this.tone(349, 0.3, { type: 'triangle', vol: 0.2, delay: 0.4 });
+    this.tone(262, 0.6, { type: 'triangle', vol: 0.2, delay: 0.65 });
   }
 
   button() { this.tone(880, 0.05, { type: 'sine', vol: 0.12 }); }
