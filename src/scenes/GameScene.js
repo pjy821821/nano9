@@ -9,7 +9,10 @@ import { sfx, haptic } from '../audio.js';
 
 const TRAY_SLOTS = 3;
 const TRAY_SLOT_X = [GAME_WIDTH * 0.2, GAME_WIDTH * 0.5, GAME_WIDTH * 0.8];
-const DRAG_LIFT = 110; // 드래그 중 손가락 위로 띄우는 거리(px)
+const DRAG_LIFT = 100; // 드래그 중 손가락 위로 띄우는 거리(px)
+// 대기열 슬롯 하나의 터치 영역(게임 좌표). 조각이 작아도 슬롯 전체가 잡히도록 넓게 잡습니다.
+const SLOT_W = GAME_WIDTH * 0.3;
+const SLOT_H = 300;
 
 export class GameScene extends Phaser.Scene {
   constructor() { super('Game'); }
@@ -25,7 +28,9 @@ export class GameScene extends Phaser.Scene {
     this.isGameOver = false;
     this.moves = 0;
 
+    this.makeTextures();
     this.drawStaticGrid();
+    this.flash = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0xffffff, 0).setOrigin(0).setDepth(40);
     this.cellSprites = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(null));
     this.ghost = this.add.graphics().setDepth(5);
 
@@ -72,7 +77,8 @@ export class GameScene extends Phaser.Scene {
     c.add([bg, t]);
     c.label = t;
     c.setSize(72, 72);
-    c.setInteractive(new Phaser.Geom.Rectangle(-40, -40, 80, 80), Phaser.Geom.Rectangle.Contains);
+    // 컨테이너 히트 영역 원점은 크기 상자 좌상단 (위 makePiece 주석 참고)
+    c.setInteractive(new Phaser.Geom.Rectangle(-4, -4, 80, 80), Phaser.Geom.Rectangle.Contains);
     c.on('pointerdown', () => {
       sfx.unlock(); sfx.button(); haptic.light();
       this.tweens.add({ targets: c, scale: 0.9, duration: 60, yoyo: true, onComplete: onClick });
@@ -87,6 +93,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ---------- 렌더링 ----------
+  makeTextures() {
+    if (this.textures.exists('px')) return;
+    const g = this.make.graphics({ x: 0, y: 0, add: false });
+    g.fillStyle(0xffffff, 1);
+    g.fillRoundedRect(0, 0, 16, 16, 4);
+    g.generateTexture('px', 16, 16);
+    g.destroy();
+  }
+
   drawStaticGrid() {
     const g = this.add.graphics();
     g.fillStyle(0x151833, 1);
@@ -132,7 +147,11 @@ export class GameScene extends Phaser.Scene {
       container.add(this.cellRect(color, c * CELL - w / 2, r * CELL - h / 2, CELL));
     }
     container.setSize(w, h);
-    container.setInteractive(new Phaser.Geom.Rectangle(-w / 2 - 20, -h / 2 - 20, w + 40, h + 40), Phaser.Geom.Rectangle.Contains);
+    // 히트 영역은 컨테이너 로컬 좌표(축소 전)로 지정되므로 TRAY_SCALE로 나눠 실제 슬롯 크기에 맞춥니다.
+    // 주의: Phaser는 컨테이너 히트 영역의 원점을 setSize 상자의 좌상단(= -w/2, -h/2 위치)으로 잡습니다.
+    // 따라서 중심 기준 사각형을 만들려면 (w - hw) / 2, (h - hh) / 2 만큼 옮겨 적어야 합니다.
+    const hw = Math.max(w + 40, SLOT_W / TRAY_SCALE), hh = Math.max(h + 40, SLOT_H / TRAY_SCALE);
+    container.setInteractive(new Phaser.Geom.Rectangle((w - hw) / 2, (h - hh) / 2, hw, hh), Phaser.Geom.Rectangle.Contains);
     this.input.setDraggable(container);
     container.setData({ shape, color, slot, rows, cols });
     container.setAlpha(0).setScale(0.2);
@@ -157,7 +176,9 @@ export class GameScene extends Phaser.Scene {
       sfx.unlock(); sfx.pickup(); haptic.light();
       this.stopTutorialHand();
       obj.setDepth(20);
-      this.tweens.add({ targets: obj, scale: 1, duration: 120 });
+      obj.setScale(1);
+      obj.y -= DRAG_LIFT;
+      this.updateGhost(obj);
     });
     this.input.on('drag', (pointer, obj, dragX, dragY) => {
       if (this.isGameOver) return;
@@ -221,13 +242,16 @@ export class GameScene extends Phaser.Scene {
 
     const { lines, cleared } = this.board.clearLines();
     if (lines > 0) {
-      this.animateClear(cleared);
+      const origin = { x: GRID_X + (col + shapeBounds(shape).cols / 2) * CELL, y: GRID_Y + (row + shapeBounds(shape).rows / 2) * CELL };
+      this.animateClear(cleared, origin, lines);
       let gain = lines * SCORE_PER_LINE;
       if (lines >= 2) gain += lines * COMBO_BONUS;
-      this.addScore(gain);
+      this.time.delayedCall(120, () => this.addScore(gain));
       sfx.clear(lines); haptic.success(lines);
-      this.popText(lines >= 2 ? `COMBO x${lines}!` : 'LINE!', lines >= 2 ? COLORS.accent : '#7fe3a5');
-      this.cameras.main.shake(120, 0.004 * lines);
+      this.popScore(gain, origin, lines);
+      this.popText(lines >= 2 ? `COMBO x${lines}!` : 'LINE!', lines >= 2 ? COLORS.accent : '#7fe3a5', lines);
+      this.cameras.main.shake(140 + 40 * lines, 0.006 + 0.004 * lines);
+      if (lines >= 2) this.screenFlash(0.18 + 0.08 * Math.min(lines, 4));
     }
 
     if (this.trayEmpty()) this.refillTray();
@@ -251,13 +275,59 @@ export class GameScene extends Phaser.Scene {
     this.popText('UNDO', COLORS.accent);
   }
 
-  animateClear(cells) {
+  // 놓은 위치에서 바깥으로 퍼지는 파동 순서로 셀이 하얗게 번쩍인 뒤 터지며 파티클을 뿌립니다.
+  animateClear(cells, origin, lines) {
     for (const [r, c] of cells) {
       const spr = this.cellSprites[r][c];
       if (!spr) continue;
       this.cellSprites[r][c] = null;
-      this.tweens.add({ targets: spr, alpha: 0, scaleX: 0.3, scaleY: 0.3, duration: 180, onComplete: () => spr.destroy() });
+      const cx = GRID_X + c * CELL + CELL / 2, cy = GRID_Y + r * CELL + CELL / 2;
+      const dist = Math.hypot(cx - origin.x, cy - origin.y);
+      const delay = Math.min(220, dist * 0.35);
+      const color = spr.colorValue || 0xffffff;
+
+      // 흰색 플래시 타일
+      const white = this.add.image(cx, cy, 'px').setDisplaySize(CELL - 6, CELL - 6).setDepth(6).setAlpha(0);
+      this.tweens.add({ targets: white, alpha: { from: 0, to: 1 }, duration: 60, delay, yoyo: true, hold: 40, onComplete: () => white.destroy() });
+
+      // 본체: 커졌다가 사라짐
+      this.tweens.add({
+        targets: spr, delay, duration: 220, ease: 'Cubic.Out',
+        alpha: 0, scaleX: 1.35, scaleY: 1.35, x: -(cx - GRID_X - c * CELL) * 0.35, y: -(cy - GRID_Y - r * CELL) * 0.35,
+        onComplete: () => spr.destroy(),
+      });
+
+      // 파편 파티클
+      this.time.delayedCall(delay + 40, () => {
+        const emitter = this.add.particles(cx, cy, 'px', {
+          speed: { min: 120, max: 320 + 60 * lines },
+          angle: { min: 0, max: 360 },
+          scale: { start: 0.9, end: 0 },
+          alpha: { start: 1, end: 0 },
+          lifespan: { min: 300, max: 550 },
+          gravityY: 500,
+          tint: [color, 0xffffff],
+          quantity: 6 + 2 * lines,
+          emitting: false,
+        }).setDepth(35);
+        emitter.explode();
+        this.time.delayedCall(700, () => emitter.destroy());
+      });
     }
+  }
+
+  screenFlash(alpha) {
+    this.flash.setAlpha(alpha);
+    this.tweens.add({ targets: this.flash, alpha: 0, duration: 260, ease: 'Quad.Out' });
+  }
+
+  popScore(gain, origin, lines) {
+    const t = this.add.text(origin.x, origin.y, `+${gain}`, {
+      fontFamily: 'Arial Black, sans-serif', fontSize: `${44 + 8 * Math.min(lines, 4)}px`, color: '#ffffff',
+      stroke: '#1b1f3a', strokeThickness: 8,
+    }).setOrigin(0.5).setDepth(36).setScale(0.4);
+    this.tweens.add({ targets: t, scale: 1, duration: 160, ease: 'Back.Out' });
+    this.tweens.add({ targets: t, y: origin.y - 140, alpha: 0, duration: 800, delay: 250, ease: 'Quad.In', onComplete: () => t.destroy() });
   }
 
   addScore(n) {
@@ -271,11 +341,15 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  popText(msg, color) {
-    const t = this.add.text(GAME_WIDTH / 2, GRID_Y + GRID_SIZE * CELL / 2, msg, {
-      fontFamily: 'Arial Black, sans-serif', fontSize: '64px', color,
-    }).setOrigin(0.5).setDepth(30);
-    this.tweens.add({ targets: t, y: t.y - 120, alpha: 0, duration: 700, ease: 'Quad.Out', onComplete: () => t.destroy() });
+  popText(msg, color, lines = 1) {
+    const size = 64 + 12 * Math.min(Math.max(lines - 1, 0), 4);
+    const t = this.add.text(GAME_WIDTH / 2, GRID_Y - 60, msg, {
+      fontFamily: 'Arial Black, sans-serif', fontSize: `${size}px`, color,
+      stroke: '#1b1f3a', strokeThickness: 10,
+    }).setOrigin(0.5).setDepth(45).setScale(0.3).setAngle(-6 + Math.random() * 12);
+    this.tweens.add({ targets: t, scale: 1.1, duration: 180, ease: 'Back.Out' });
+    this.tweens.add({ targets: t, scale: 1, duration: 120, delay: 180 });
+    this.tweens.add({ targets: t, y: t.y - 60, alpha: 0, duration: 500, delay: 650, ease: 'Quad.In', onComplete: () => t.destroy() });
   }
 
   checkGameOver() {
@@ -382,7 +456,7 @@ export class GameScene extends Phaser.Scene {
     const t = this.add.text(0, 0, label, { fontFamily: 'Arial Black, sans-serif', fontSize: '34px', color: '#102030' }).setOrigin(0.5);
     c.add([bg, t]);
     c.setSize(480, 88);
-    c.setInteractive(new Phaser.Geom.Rectangle(-240, -44, 480, 88), Phaser.Geom.Rectangle.Contains);
+    c.setInteractive(new Phaser.Geom.Rectangle(0, 0, 480, 88), Phaser.Geom.Rectangle.Contains);
     c.on('pointerdown', () => {
       sfx.button(); haptic.light();
       this.tweens.add({ targets: c, scale: 0.95, duration: 60, yoyo: true, onComplete: onClick });

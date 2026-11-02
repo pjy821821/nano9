@@ -47,12 +47,37 @@ class Sfx {
   place() { this.tone(300, 0.08, { type: 'square', vol: 0.12, slide: 180 }); }
   reject() { this.tone(160, 0.12, { type: 'sawtooth', vol: 0.08, slide: 120 }); }
 
+  noise(dur, { vol = 0.2, delay = 0 } = {}) {
+    if (this.muted || !this.ctx) return;
+    const t0 = this.ctx.currentTime + delay;
+    const len = Math.floor(this.ctx.sampleRate * dur);
+    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    const filt = this.ctx.createBiquadFilter();
+    filt.type = 'lowpass'; filt.frequency.setValueAtTime(1800, t0); filt.frequency.exponentialRampToValueAtTime(200, t0 + dur);
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(vol, t0);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(filt).connect(gain).connect(this.ctx.destination);
+    src.start(t0);
+  }
+
   clear(lines) {
-    // 줄 수만큼 음을 올려가며 아르페지오
-    const base = [523, 659, 784, 1047, 1319];
-    for (let i = 0; i < Math.min(lines + 1, 5); i++) {
-      this.tone(base[i], 0.18, { type: 'triangle', vol: 0.2, delay: i * 0.06 });
+    // 1) 묵직한 타격: 저음 킥 + 노이즈 펑
+    this.tone(140, 0.22, { type: 'sine', vol: 0.5, slide: 40 });
+    this.noise(0.25, { vol: 0.25 });
+    // 2) 줄 수만큼 음을 올려가며 아르페지오 (콤보일수록 길고 높게)
+    const base = [523, 659, 784, 1047, 1319, 1568];
+    const n = Math.min(lines + 2, base.length);
+    for (let i = 0; i < n; i++) {
+      this.tone(base[i], 0.22, { type: 'triangle', vol: 0.22, delay: 0.05 + i * 0.055 });
+      this.tone(base[i] / 2, 0.22, { type: 'square', vol: 0.06, delay: 0.05 + i * 0.055 });
     }
+    // 3) 콤보면 마지막에 반짝이는 고음
+    if (lines >= 2) this.tone(2093, 0.35, { type: 'sine', vol: 0.18, delay: 0.05 + n * 0.055, slide: 2637 });
   }
 
   gameOver() {

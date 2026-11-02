@@ -2,7 +2,7 @@
 
 세로 화면 싱글 플레이 블록 퍼즐 게임 프로토타입입니다. Phaser 3로 만들었고 빌드 과정 없이 정적 파일로 실행됩니다.
 
-장르 선정 근거와 수익 목표 계산은 [docs/market-research.md](docs/market-research.md)에 있습니다.
+장르 선정 근거와 수익 목표 계산은 [docs/market-research.md](docs/market-research.md)에, 경쟁 환경과 차별화 전략은 [docs/competitive-analysis.md](docs/competitive-analysis.md)에 있습니다.
 
 ## 실행
 
