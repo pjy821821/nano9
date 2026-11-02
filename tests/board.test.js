@@ -40,3 +40,16 @@ test('모든 조각은 8x8 안에 들어간다', () => {
     assert.ok(rows <= 8 && cols <= 8);
   }
 });
+
+test('snapshot/restore는 깊은 복사로 동작한다', () => {
+  const b = new Board(8);
+  b.place([[0, 0], [0, 1]], 2, 2, 7);
+  const snap = b.snapshot();
+  b.place([[0, 0]], 0, 0, 3);
+  snap[5][5] = 9; // 스냅샷을 건드려도 보드에 영향 없어야 함
+  assert.equal(b.cells[5][5], 0);
+  b.restore(snap);
+  assert.equal(b.cells[0][0], 0);
+  assert.equal(b.cells[2][2], 7);
+  assert.equal(b.cells[5][5], 9);
+});

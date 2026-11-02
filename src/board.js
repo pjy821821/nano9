@@ -41,6 +41,14 @@ export class Board {
     return false;
   }
 
+  snapshot() {
+    return this.cells.map(row => row.slice());
+  }
+
+  restore(cells) {
+    this.cells = cells.map(row => row.slice());
+  }
+
   clearRandomCells(count) {
     const filled = [];
     for (let r = 0; r < this.size; r++)

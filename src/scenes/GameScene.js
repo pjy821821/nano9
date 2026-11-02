@@ -1,13 +1,15 @@
 import {
   GRID_SIZE, CELL, GRID_X, GRID_Y, TRAY_Y, TRAY_SCALE, GAME_WIDTH, GAME_HEIGHT,
-  COLORS, PIECE_COLORS, SCORE_PER_CELL, SCORE_PER_LINE, COMBO_BONUS, STORAGE_KEY,
+  COLORS, PIECE_COLORS, SCORE_PER_CELL, SCORE_PER_LINE, COMBO_BONUS, STORAGE_KEY, TUTORIAL_KEY,
 } from '../config.js';
 import { randomShape, shapeBounds } from '../shapes.js';
 import { Board } from '../board.js';
 import { Ads } from '../ads.js';
+import { sfx, haptic } from '../audio.js';
 
 const TRAY_SLOTS = 3;
 const TRAY_SLOT_X = [GAME_WIDTH * 0.2, GAME_WIDTH * 0.5, GAME_WIDTH * 0.8];
+const DRAG_LIFT = 110; // 드래그 중 손가락 위로 띄우는 거리(px)
 
 export class GameScene extends Phaser.Scene {
   constructor() { super('Game'); }
@@ -17,7 +19,11 @@ export class GameScene extends Phaser.Scene {
     this.score = 0;
     this.best = this.loadBest();
     this.continueUsed = false;
+    this.undoUsed = false;
+    this.undoSnapshot = null;   // { cells, score, tray: [{shape,color,slot}|null] }
     this.gameOverCount = 0;
+    this.isGameOver = false;
+    this.moves = 0;
 
     this.drawStaticGrid();
     this.cellSprites = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(null));
@@ -30,9 +36,54 @@ export class GameScene extends Phaser.Scene {
       fontFamily: 'Arial, sans-serif', fontSize: '30px', color: COLORS.textDim,
     }).setOrigin(0.5);
 
+    this.createHud();
+
     this.tray = [null, null, null];
     this.refillTray();
     this.setupInput();
+
+    if (!this.tutorialDone()) this.startTutorial();
+  }
+
+  // ---------- HUD (음소거, 되돌리기) ----------
+  createHud() {
+    this.muteBtn = this.iconButton(GAME_WIDTH - 70, 70, sfx.muted ? '🔇' : '🔊', () => {
+      const m = sfx.toggleMute();
+      this.muteBtn.label.setText(m ? '🔇' : '🔊');
+    });
+
+    this.undoBtn = this.iconButton(70, 70, '↶', async () => {
+      if (!this.undoSnapshot || this.undoUsed || this.isGameOver) return;
+      if (!Ads.rewardedReady()) return;
+      const ok = await Ads.showRewarded();
+      if (!ok) return;
+      this.performUndo();
+    });
+    this.undoBtn.badge = this.add.text(70, 108, 'AD', {
+      fontFamily: 'Arial Black, sans-serif', fontSize: '16px', color: '#102030', backgroundColor: '#ffd166', padding: { x: 6, y: 2 },
+    }).setOrigin(0.5).setDepth(51);
+    this.refreshUndoButton();
+  }
+
+  iconButton(x, y, label, onClick) {
+    const c = this.add.container(x, y).setDepth(50);
+    const bg = this.add.circle(0, 0, 36, 0x2a2f55, 1);
+    const t = this.add.text(0, 0, label, { fontSize: '36px', color: COLORS.text }).setOrigin(0.5);
+    c.add([bg, t]);
+    c.label = t;
+    c.setSize(72, 72);
+    c.setInteractive(new Phaser.Geom.Rectangle(-40, -40, 80, 80), Phaser.Geom.Rectangle.Contains);
+    c.on('pointerdown', () => {
+      sfx.unlock(); sfx.button(); haptic.light();
+      this.tweens.add({ targets: c, scale: 0.9, duration: 60, yoyo: true, onComplete: onClick });
+    });
+    return c;
+  }
+
+  refreshUndoButton() {
+    const enabled = !!this.undoSnapshot && !this.undoUsed && !this.isGameOver;
+    this.undoBtn.setAlpha(enabled ? 1 : 0.35);
+    this.undoBtn.badge.setVisible(enabled);
   }
 
   // ---------- 렌더링 ----------
@@ -62,18 +113,18 @@ export class GameScene extends Phaser.Scene {
       for (let c = 0; c < GRID_SIZE; c++) {
         const v = this.board.cells[r][c];
         const existing = this.cellSprites[r][c];
-        if (v === 0 && existing) { existing.destroy(); this.cellSprites[r][c] = null; }
-        if (v !== 0 && !existing) {
-          this.cellSprites[r][c] = this.cellRect(v, GRID_X + c * CELL, GRID_Y + r * CELL, CELL).setDepth(2);
+        if (existing && (v === 0 || existing.colorValue !== v)) { existing.destroy(); this.cellSprites[r][c] = null; }
+        if (v !== 0 && !this.cellSprites[r][c]) {
+          const g = this.cellRect(v, GRID_X + c * CELL, GRID_Y + r * CELL, CELL).setDepth(2);
+          g.colorValue = v;
+          this.cellSprites[r][c] = g;
         }
       }
     }
   }
 
   // ---------- 조각 대기열 ----------
-  makePiece(slot) {
-    const shape = randomShape();
-    const color = PIECE_COLORS[Math.floor(Math.random() * PIECE_COLORS.length)];
+  makePiece(slot, shape = randomShape(), color = PIECE_COLORS[Math.floor(Math.random() * PIECE_COLORS.length)]) {
     const { rows, cols } = shapeBounds(shape);
     const container = this.add.container(TRAY_SLOT_X[slot], TRAY_Y).setDepth(10);
     const w = cols * CELL, h = rows * CELL;
@@ -81,7 +132,6 @@ export class GameScene extends Phaser.Scene {
       container.add(this.cellRect(color, c * CELL - w / 2, r * CELL - h / 2, CELL));
     }
     container.setSize(w, h);
-    container.setScale(TRAY_SCALE);
     container.setInteractive(new Phaser.Geom.Rectangle(-w / 2 - 20, -h / 2 - 20, w + 40, h + 40), Phaser.Geom.Rectangle.Contains);
     this.input.setDraggable(container);
     container.setData({ shape, color, slot, rows, cols });
@@ -96,18 +146,23 @@ export class GameScene extends Phaser.Scene {
 
   trayEmpty() { return this.tray.every(p => p === null); }
 
+  trayData() {
+    return this.tray.map(p => p ? { shape: p.data.values.shape, color: p.data.values.color, slot: p.data.values.slot } : null);
+  }
+
   // ---------- 입력 ----------
   setupInput() {
     this.input.on('dragstart', (pointer, obj) => {
       if (this.isGameOver) return;
+      sfx.unlock(); sfx.pickup(); haptic.light();
+      this.stopTutorialHand();
       obj.setDepth(20);
       this.tweens.add({ targets: obj, scale: 1, duration: 120 });
     });
     this.input.on('drag', (pointer, obj, dragX, dragY) => {
       if (this.isGameOver) return;
-      // 손가락에 가려지지 않도록 조각을 위로 띄움
       obj.x = dragX;
-      obj.y = dragY - 110;
+      obj.y = dragY - DRAG_LIFT;
       this.updateGhost(obj);
     });
     this.input.on('dragend', (pointer, obj) => {
@@ -118,13 +173,14 @@ export class GameScene extends Phaser.Scene {
       if (pos && this.board.canPlace(shape, pos.row, pos.col)) {
         this.commitPiece(obj, pos.row, pos.col, shape, color);
       } else {
+        sfx.reject();
         obj.setDepth(10);
         this.tweens.add({ targets: obj, x: TRAY_SLOT_X[obj.data.values.slot], y: TRAY_Y, scale: TRAY_SCALE, duration: 180, ease: 'Quad.Out' });
+        if (this.moves === 0 && !this.tutorialDone()) this.startTutorial();
       }
     });
   }
 
-  // 조각 컨테이너의 좌상단 셀이 격자의 어느 칸에 해당하는지 계산
   pieceGridPos(obj) {
     const { rows, cols } = obj.data.values;
     const left = obj.x - (cols * CELL) / 2;
@@ -151,11 +207,17 @@ export class GameScene extends Phaser.Scene {
 
   // ---------- 게임 규칙 ----------
   commitPiece(obj, row, col, shape, color) {
+    // 되돌리기용 스냅샷: 배치 직전 상태
+    this.undoSnapshot = { cells: this.board.snapshot(), score: this.score, tray: this.trayData() };
+
     this.board.place(shape, row, col, color);
     this.tray[obj.data.values.slot] = null;
     obj.destroy();
     this.renderBoard();
     this.addScore(shape.length * SCORE_PER_CELL);
+    this.moves += 1;
+    sfx.place(); haptic.medium();
+    if (this.moves === 1) this.markTutorialDone();
 
     const { lines, cleared } = this.board.clearLines();
     if (lines > 0) {
@@ -163,11 +225,30 @@ export class GameScene extends Phaser.Scene {
       let gain = lines * SCORE_PER_LINE;
       if (lines >= 2) gain += lines * COMBO_BONUS;
       this.addScore(gain);
+      sfx.clear(lines); haptic.success(lines);
       this.popText(lines >= 2 ? `COMBO x${lines}!` : 'LINE!', lines >= 2 ? COLORS.accent : '#7fe3a5');
+      this.cameras.main.shake(120, 0.004 * lines);
     }
 
     if (this.trayEmpty()) this.refillTray();
+    this.refreshUndoButton();
     this.time.delayedCall(60, () => this.checkGameOver());
+  }
+
+  performUndo() {
+    const s = this.undoSnapshot;
+    if (!s) return;
+    this.board.restore(s.cells);
+    this.score = s.score;
+    this.scoreText.setText(String(this.score));
+    for (const p of this.tray) if (p) p.destroy();
+    this.tray = s.tray.map(d => d ? this.makePiece(d.slot, d.shape, d.color) : null);
+    this.renderBoard();
+    this.undoSnapshot = null;
+    this.undoUsed = true;
+    this.moves = Math.max(0, this.moves - 1);
+    this.refreshUndoButton();
+    this.popText('UNDO', COLORS.accent);
   }
 
   animateClear(cells) {
@@ -202,7 +283,59 @@ export class GameScene extends Phaser.Scene {
     if (anyMove) return;
     this.isGameOver = true;
     this.gameOverCount += 1;
+    this.refreshUndoButton();
+    sfx.gameOver(); haptic.fail();
     this.showGameOver();
+  }
+
+  // ---------- 튜토리얼: 손가락 힌트 ----------
+  tutorialDone() {
+    try { return localStorage.getItem(TUTORIAL_KEY) === '1'; } catch { return true; }
+  }
+  markTutorialDone() {
+    try { localStorage.setItem(TUTORIAL_KEY, '1'); } catch { /* ignore */ }
+    this.stopTutorialHand();
+  }
+
+  // 대기열 첫 조각을 집어 보드에 놓을 수 있는 첫 위치로 움직이는 손가락 애니메이션
+  startTutorial() {
+    this.stopTutorialHand();
+    const piece = this.tray.find(p => p);
+    if (!piece) return;
+    const { shape, rows, cols } = piece.data.values;
+    let target = null;
+    for (let r = 0; r < GRID_SIZE && !target; r++)
+      for (let c = 0; c < GRID_SIZE && !target; c++)
+        if (this.board.canPlace(shape, r, c)) target = { r, c };
+    if (!target) return;
+
+    const tx = GRID_X + target.c * CELL + (cols * CELL) / 2;
+    const ty = GRID_Y + target.r * CELL + (rows * CELL) / 2 + DRAG_LIFT;
+
+    this.tutorialHint = this.add.text(GAME_WIDTH / 2, GRID_Y - 40, '조각을 끌어서 보드에 놓으세요', {
+      fontFamily: 'Arial, sans-serif', fontSize: '28px', color: COLORS.accent,
+    }).setOrigin(0.5).setDepth(60);
+
+    this.tutorialHand = this.add.text(piece.x, piece.y + 30, '👆', { fontSize: '72px' }).setOrigin(0.5, 0).setDepth(60);
+    this.tutorialTween = this.tweens.chain({
+      targets: this.tutorialHand,
+      loop: -1,
+      tweens: [
+        { alpha: { from: 0, to: 1 }, duration: 250 },
+        { scale: 0.85, duration: 150 },
+        { x: tx, y: ty + 30, duration: 900, ease: 'Sine.InOut' },
+        { scale: 1, duration: 150 },
+        { alpha: 0, duration: 300, delay: 300 },
+        { x: piece.x, y: piece.y + 30, duration: 1 },
+        { duration: 400 },
+      ],
+    });
+  }
+
+  stopTutorialHand() {
+    if (this.tutorialTween) { this.tutorialTween.destroy(); this.tutorialTween = null; }
+    if (this.tutorialHand) { this.tutorialHand.destroy(); this.tutorialHand = null; }
+    if (this.tutorialHint) { this.tutorialHint.destroy(); this.tutorialHint = null; }
   }
 
   // ---------- 게임오버 / 수익화 지점 ----------
@@ -220,7 +353,6 @@ export class GameScene extends Phaser.Scene {
     }).setOrigin(0.5);
     ui.add([dim, panel, title, scoreLine]);
 
-    // 보상형 광고로 이어하기: 1판당 1회. 핵심 수익 지점.
     if (!this.continueUsed && Ads.rewardedReady()) {
       ui.add(this.makeButton(GAME_WIDTH / 2, 640, '▶ 광고 보고 이어하기', 0x06d6a0, async () => {
         const ok = await Ads.showRewarded();
@@ -230,12 +362,13 @@ export class GameScene extends Phaser.Scene {
         this.board.clearRandomCells(20);
         this.renderBoard();
         this.isGameOver = false;
+        this.undoSnapshot = null;
+        this.refreshUndoButton();
         this.checkGameOver();
       }));
     }
 
     ui.add(this.makeButton(GAME_WIDTH / 2, 760, '다시 시작', 0x4cc9f0, async () => {
-      // 전면 광고는 3판마다 1회. 빈도는 리텐션 데이터를 보고 조정.
       if (this.gameOverCount % 3 === 0) await Ads.showInterstitial();
       this.scene.restart();
     }));
@@ -250,7 +383,10 @@ export class GameScene extends Phaser.Scene {
     c.add([bg, t]);
     c.setSize(480, 88);
     c.setInteractive(new Phaser.Geom.Rectangle(-240, -44, 480, 88), Phaser.Geom.Rectangle.Contains);
-    c.on('pointerdown', () => this.tweens.add({ targets: c, scale: 0.95, duration: 60, yoyo: true, onComplete: onClick }));
+    c.on('pointerdown', () => {
+      sfx.button(); haptic.light();
+      this.tweens.add({ targets: c, scale: 0.95, duration: 60, yoyo: true, onComplete: onClick });
+    });
     return c;
   }
 
@@ -259,6 +395,6 @@ export class GameScene extends Phaser.Scene {
     try { return Number(localStorage.getItem(STORAGE_KEY)) || 0; } catch { return 0; }
   }
   saveBest(v) {
-    try { localStorage.setItem(STORAGE_KEY, String(v)); } catch { /* 사생활 보호 모드 등 */ }
+    try { localStorage.setItem(STORAGE_KEY, String(v)); } catch { /* ignore */ }
   }
 }

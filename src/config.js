@@ -30,3 +30,4 @@ export const SCORE_PER_LINE = 10;         // 줄 1개 제거
 export const COMBO_BONUS = 10;            // 동시 제거 줄 수 2개 이상일 때 추가 (줄 수 * 보너스)
 
 export const STORAGE_KEY = 'blockdrop.best';
+export const TUTORIAL_KEY = 'blockdrop.tutorialDone';
