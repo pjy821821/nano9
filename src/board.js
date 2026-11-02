@@ -49,6 +49,27 @@ export class Board {
     this.cells = cells.map(row => row.slice());
   }
 
+  filledCount() {
+    let n = 0;
+    for (const row of this.cells) for (const v of row) if (v !== 0) n++;
+    return n;
+  }
+
+  // 채워진 칸의 색을 모두 모아 무작위 위치에 다시 배치합니다 (개수 유지).
+  shuffle() {
+    const colors = [];
+    for (let r = 0; r < this.size; r++)
+      for (let c = 0; c < this.size; c++)
+        if (this.cells[r][c] !== 0) { colors.push(this.cells[r][c]); this.cells[r][c] = 0; }
+    const spots = [];
+    for (let r = 0; r < this.size; r++) for (let c = 0; c < this.size; c++) spots.push([r, c]);
+    for (let i = spots.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [spots[i], spots[j]] = [spots[j], spots[i]];
+    }
+    colors.forEach((color, i) => { const [r, c] = spots[i]; this.cells[r][c] = color; });
+  }
+
   clearRandomCells(count) {
     const filled = [];
     for (let r = 0; r < this.size; r++)

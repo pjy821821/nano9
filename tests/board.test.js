@@ -53,3 +53,23 @@ test('snapshot/restore는 깊은 복사로 동작한다', () => {
   assert.equal(b.cells[2][2], 7);
   assert.equal(b.cells[5][5], 9);
 });
+
+test('rotateShape는 시계 방향 90도 회전 후 정규화한다', async () => {
+  const { rotateShape } = await import('../src/shapes.js');
+  const L = [[0, 0], [1, 0], [2, 0], [2, 1]];       // L
+  const r1 = rotateShape(L);
+  assert.deepEqual(r1, [[0, 0], [0, 1], [0, 2], [1, 0]]);
+  const r4 = rotateShape(rotateShape(rotateShape(r1)));
+  assert.deepEqual(r4, L);                           // 4번 돌리면 원래대로
+  assert.deepEqual(rotateShape([[0, 0]]), [[0, 0]]);
+});
+
+test('shuffle은 채워진 칸 수를 유지한다', () => {
+  const b = new Board(8);
+  for (let c = 0; c < 8; c++) b.cells[0][c] = 1;
+  b.cells[4][4] = 2;
+  b.shuffle();
+  assert.equal(b.filledCount(), 9);
+  const colors = b.cells.flat().filter(v => v).sort();
+  assert.deepEqual(colors, [1, 1, 1, 1, 1, 1, 1, 1, 2]);
+});

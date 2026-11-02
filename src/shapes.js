@@ -44,3 +44,16 @@ export function shapeBounds(shape) {
   for (const [r, c] of shape) { if (r > maxR) maxR = r; if (c > maxC) maxC = c; }
   return { rows: maxR + 1, cols: maxC + 1 };
 }
+
+// 시계 방향 90도 회전: (r, c) -> (c, rows-1-r), 좌상단 기준으로 정규화
+export function rotateShape(shape) {
+  const { rows } = shapeBounds(shape);
+  const rotated = shape.map(([r, c]) => [c, rows - 1 - r]);
+  return normalize(rotated);
+}
+
+export function normalize(shape) {
+  let minR = Infinity, minC = Infinity;
+  for (const [r, c] of shape) { if (r < minR) minR = r; if (c < minC) minC = c; }
+  return shape.map(([r, c]) => [r - minR, c - minC]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+}

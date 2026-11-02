@@ -7,7 +7,8 @@ export const CELL = 76;            // 셀 한 변(px)
 export const GRID_X = (GAME_WIDTH - GRID_SIZE * CELL) / 2;
 export const GRID_Y = 262;
 
-export const TRAY_Y = GRID_Y + GRID_SIZE * CELL + 170; // 조각 대기열 중심 y
+export const ITEM_Y = GRID_Y + GRID_SIZE * CELL + 70;  // 아이템 바 중심 y
+export const TRAY_Y = GRID_Y + GRID_SIZE * CELL + 215; // 조각 대기열 중심 y
 export const TRAY_SCALE = 0.55;                         // 대기열에서 조각 축소 비율
 
 // ---------- 조각보 테마 ----------
@@ -52,6 +53,16 @@ export const FONT_UI = '"Gowun Dodum", "Noto Sans KR", "Apple SD Gothic Neo", sa
 export const SCORE_PER_CELL = 1;          // 블록 1칸 놓을 때
 export const SCORE_PER_LINE = 10;         // 줄 1개 제거
 export const COMBO_BONUS = 10;            // 동시 제거 줄 수 2개 이상일 때 추가 (줄 수 * 보너스)
+
+// 아이템: 1판당 기본 횟수. 다 쓰면 보상형 광고로 충전.
+export const ITEMS = {
+  rotate: { label: '회전', uses: 3, refill: 3 },
+  shuffle: { label: '뒤섞기', uses: 1, refill: 1 },
+  redraw: { label: '새 조각', uses: 1, refill: 1 },
+};
+
+// 연속 제거(스트릭) 배율: 줄을 지운 직후 다음 배치에서도 지우면 배율이 오릅니다. 못 지우면 초기화.
+export const STREAK_MAX_MULT = 5;
 
 // 줄 제거 문구: 바느질 "땀" 수로 표현
 export const CLEAR_WORDS = ['한 땀!', '두 땀!!', '세 땀!!!', '네 땀!!!!', '다섯 땀!', '여섯 땀!'];

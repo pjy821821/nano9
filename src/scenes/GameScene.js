@@ -1,9 +1,9 @@
 import {
-  GRID_SIZE, CELL, GRID_X, GRID_Y, TRAY_Y, TRAY_SCALE, GAME_WIDTH, GAME_HEIGHT,
+  GRID_SIZE, CELL, GRID_X, GRID_Y, TRAY_Y, ITEM_Y, TRAY_SCALE, GAME_WIDTH, GAME_HEIGHT,
   COLORS, PIECE_COLORS, SCORE_PER_CELL, SCORE_PER_LINE, COMBO_BONUS, CLEAR_WORDS,
-  STORAGE_KEY, TUTORIAL_KEY, FONT_DISPLAY, FONT_UI,
+  STORAGE_KEY, TUTORIAL_KEY, FONT_DISPLAY, FONT_UI, ITEMS, STREAK_MAX_MULT,
 } from '../config.js';
-import { randomShape, shapeBounds } from '../shapes.js';
+import { randomShape, shapeBounds, rotateShape } from '../shapes.js';
 import { Board } from '../board.js';
 import { Ads } from '../ads.js';
 import { sfx, haptic } from '../audio.js';
@@ -14,7 +14,10 @@ const TRAY_SLOT_X = [GAME_WIDTH * 0.2, GAME_WIDTH * 0.5, GAME_WIDTH * 0.8];
 const DRAG_LIFT = 100; // 드래그 중 손가락 위로 띄우는 거리(px)
 // 대기열 슬롯 하나의 터치 영역(게임 좌표). 조각이 작아도 슬롯 전체가 잡히도록 넓게 잡습니다.
 const SLOT_W = GAME_WIDTH * 0.3;
-const SLOT_H = 300;
+const SLOT_H = 230;
+// 탭 판정: 이 거리/시간 안에 떼면 드래그가 아니라 탭(회전)으로 봅니다.
+const TAP_DIST = 14;
+const TAP_MS = 350;
 
 export class GameScene extends Phaser.Scene {
   constructor() { super('Game'); }
@@ -29,6 +32,8 @@ export class GameScene extends Phaser.Scene {
     this.gameOverCount = 0;
     this.isGameOver = false;
     this.moves = 0;
+    this.streak = 0;            // 연속으로 줄을 지운 횟수
+    this.items = Object.fromEntries(Object.entries(ITEMS).map(([k, v]) => [k, v.uses]));
 
     makeHanjiTexture(this);
     makeScrapTexture(this);
@@ -39,6 +44,7 @@ export class GameScene extends Phaser.Scene {
     this.ghost = this.add.graphics().setDepth(5);
 
     this.createHeader();
+    this.createItemBar();
 
     this.tray = [null, null, null];
     this.refillTray();
@@ -60,6 +66,11 @@ export class GameScene extends Phaser.Scene {
     this.bestText = this.add.text(GAME_WIDTH / 2, 196, `최고 ${this.best}`, {
       fontFamily: FONT_UI, fontSize: '28px', color: COLORS.textDim,
     }).setOrigin(0.5);
+
+    // 연속 제거 배율 배지 (스트릭 2 이상일 때만 표시)
+    this.streakBadge = this.add.text(GAME_WIDTH / 2 + 150, 128, '', {
+      fontFamily: FONT_UI, fontSize: '26px', color: '#f3e9d6', backgroundColor: '#d9463b', padding: { x: 12, y: 6 },
+    }).setOrigin(0.5).setDepth(3).setVisible(false);
 
     this.muteBtn = this.iconButton(GAME_WIDTH - 70, 70, sfx.muted ? '🔇' : '🔊', () => {
       const m = sfx.toggleMute();
@@ -104,6 +115,141 @@ export class GameScene extends Phaser.Scene {
     this.undoBtn.badge.setVisible(enabled);
   }
 
+  // ---------- 아이템 바 ----------
+  createItemBar() {
+    const keys = Object.keys(ITEMS);
+    const xs = [GAME_WIDTH * 0.2, GAME_WIDTH * 0.5, GAME_WIDTH * 0.8];
+    this.itemBtns = {};
+    keys.forEach((key, i) => {
+      const c = this.add.container(xs[i], ITEM_Y).setDepth(50);
+      const bg = this.add.graphics();
+      const W = 196, H = 62;
+      bg.fillStyle(COLORS.frameDark, 1); bg.fillRoundedRect(-W / 2 + 2, -H / 2 + 3, W, H, 16);
+      bg.fillStyle(COLORS.frame, 1); bg.fillRoundedRect(-W / 2, -H / 2, W, H, 16);
+      bg.lineStyle(1.5, 0xf3e9d6, 0.45); bg.strokeRoundedRect(-W / 2 + 6, -H / 2 + 6, W - 12, H - 12, 12);
+      const label = this.add.text(-W / 2 + 18, 0, ITEMS[key].label, { fontFamily: FONT_UI, fontSize: '26px', color: COLORS.textOnFrame }).setOrigin(0, 0.5);
+      const count = this.add.text(W / 2 - 18, 0, '', { fontFamily: FONT_UI, fontSize: '20px', color: '#1d1a17', backgroundColor: '#e8b63a', padding: { x: 8, y: 3 } }).setOrigin(1, 0.5);
+      c.add([bg, label, count]);
+      c.count = count;
+      c.setSize(W, H);
+      c.setInteractive(new Phaser.Geom.Rectangle(0, 0, W, H), Phaser.Geom.Rectangle.Contains);
+      c.on('pointerdown', () => {
+        sfx.unlock(); sfx.button(); haptic.light();
+        this.tweens.add({ targets: c, scale: 0.93, duration: 60, yoyo: true, onComplete: () => this.onItemButton(key) });
+      });
+      this.itemBtns[key] = c;
+    });
+    this.refreshItemBar();
+  }
+
+  refreshItemBar() {
+    for (const key of Object.keys(ITEMS)) {
+      const n = this.items[key];
+      const btn = this.itemBtns[key];
+      btn.count.setText(n > 0 ? `${n}` : '광고');
+      btn.count.setStyle({ backgroundColor: n > 0 ? '#e8b63a' : '#d9463b', color: n > 0 ? '#1d1a17' : '#f3e9d6' });
+    }
+    // 회전은 조각을 탭해서 쓰므로, 남은 횟수가 있으면 버튼은 안내 역할
+    this.itemBtns.rotate.setAlpha(this.isGameOver ? 0.4 : 1);
+    this.itemBtns.shuffle.setAlpha(this.isGameOver ? 0.4 : 1);
+    this.itemBtns.redraw.setAlpha(this.isGameOver ? 0.4 : 1);
+  }
+
+  async onItemButton(key) {
+    if (this.isGameOver) return;
+    if (this.items[key] <= 0) {
+      // 광고로 충전
+      if (!Ads.rewardedReady()) return;
+      const ok = await Ads.showRewarded();
+      if (!ok) return;
+      this.items[key] += ITEMS[key].refill;
+      this.refreshItemBar();
+      this.popText(`${ITEMS[key].label} +${ITEMS[key].refill}`, COLORS.accent);
+      return;
+    }
+    if (key === 'rotate') {
+      this.popText('조각을 톡 치면 돌아가요', '#2b6cb0');
+      this.hintRotate();
+      return;
+    }
+    if (key === 'shuffle') this.useShuffle();
+    if (key === 'redraw') this.useRedraw();
+  }
+
+  // 회전 안내: 대기열 조각들이 살짝 흔들림
+  hintRotate() {
+    for (const p of this.tray) if (p) this.tweens.add({ targets: p, angle: { from: -8, to: 8 }, duration: 90, yoyo: true, repeat: 3, onComplete: () => p.setAngle(0) });
+  }
+
+  // 조각 탭 → 시계 방향 90도 회전 (남은 횟수 차감)
+  rotatePiece(obj) {
+    if (this.items.rotate <= 0) {
+      this.popText('회전 횟수가 없어요', COLORS.accent);
+      this.tweens.add({ targets: this.itemBtns.rotate, scale: 1.1, duration: 90, yoyo: true, repeat: 2 });
+      return;
+    }
+    const { shape, color, slot } = obj.data.values;
+    if (shape.length === 1) { this.tweens.add({ targets: obj, angle: 360, duration: 220, onComplete: () => obj.setAngle(0) }); return; }
+    this.items.rotate -= 1;
+    this.refreshItemBar();
+    sfx.pickup(); haptic.light();
+    this.input.setDraggable(obj, false);
+    this.tweens.add({
+      targets: obj, angle: 90, duration: 140, ease: 'Quad.Out',
+      onComplete: () => {
+        obj.destroy();
+        this.tray[slot] = this.makePiece(slot, rotateShape(shape), color, false);
+      },
+    });
+  }
+
+  useShuffle() {
+    if (this.board.filledCount() === 0) { this.popText('섞을 조각이 없어요', '#2b6cb0'); return; }
+    this.items.shuffle -= 1;
+    this.refreshItemBar();
+    // 대기열 조각 중 하나라도 들어갈 수 있는 배치가 나올 때까지 몇 번 시도
+    for (let i = 0; i < 30; i++) {
+      this.board.shuffle();
+      if (this.tray.some(p => p && this.board.anyPlacement(p.data.values.shape))) break;
+    }
+    this.undoSnapshot = null;
+    this.refreshUndoButton();
+    sfx.clear(1); haptic.medium();
+    this.cameras.main.shake(160, 0.006);
+    // 기존 칸을 흩뿌리듯 사라지게 한 뒤 새 배치 표시
+    for (let r = 0; r < GRID_SIZE; r++)
+      for (let c = 0; c < GRID_SIZE; c++) {
+        const spr = this.cellSprites[r][c];
+        if (!spr) continue;
+        this.cellSprites[r][c] = null;
+        this.tweens.add({ targets: spr, alpha: 0, duration: 160, onComplete: () => spr.destroy() });
+      }
+    this.time.delayedCall(170, () => {
+      this.renderBoard();
+      for (const row of this.cellSprites) for (const spr of row) if (spr) { spr.setAlpha(0); this.tweens.add({ targets: spr, alpha: 1, duration: 200 }); }
+      this.popText('뒤섞기!', COLORS.accent);
+      this.checkGameOver();
+    });
+  }
+
+  useRedraw() {
+    this.items.redraw -= 1;
+    this.refreshItemBar();
+    sfx.pickup(); haptic.medium();
+    for (let i = 0; i < this.tray.length; i++) {
+      const p = this.tray[i];
+      if (p) this.tweens.add({ targets: p, alpha: 0, scale: 0.2, duration: 140, onComplete: () => p.destroy() });
+      this.tray[i] = null;
+    }
+    this.time.delayedCall(150, () => {
+      this.refillTray();
+      this.undoSnapshot = null;
+      this.refreshUndoButton();
+      this.popText('새 조각!', '#2b6cb0');
+      this.checkGameOver();
+    });
+  }
+
   // ---------- 렌더링 ----------
   drawStaticGrid() {
     const g = this.add.graphics();
@@ -136,7 +282,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ---------- 조각 대기열 ----------
-  makePiece(slot, shape = randomShape(), color = PIECE_COLORS[Math.floor(Math.random() * PIECE_COLORS.length)]) {
+  makePiece(slot, shape = randomShape(), color = PIECE_COLORS[Math.floor(Math.random() * PIECE_COLORS.length)], animate = true) {
     const { rows, cols } = shapeBounds(shape);
     const container = this.add.container(TRAY_SLOT_X[slot], TRAY_Y).setDepth(10);
     const w = cols * CELL, h = rows * CELL;
@@ -151,8 +297,12 @@ export class GameScene extends Phaser.Scene {
     container.setInteractive(new Phaser.Geom.Rectangle((w - hw) / 2, (h - hh) / 2, hw, hh), Phaser.Geom.Rectangle.Contains);
     this.input.setDraggable(container);
     container.setData({ shape, color, slot, rows, cols });
-    container.setAlpha(0).setScale(0.2);
-    this.tweens.add({ targets: container, alpha: 1, scale: TRAY_SCALE, duration: 220, ease: 'Back.Out' });
+    if (animate) {
+      container.setAlpha(0).setScale(0.2);
+      this.tweens.add({ targets: container, alpha: 1, scale: TRAY_SCALE, duration: 220, ease: 'Back.Out' });
+    } else {
+      container.setScale(TRAY_SCALE);
+    }
     return container;
   }
 
@@ -186,6 +336,15 @@ export class GameScene extends Phaser.Scene {
     this.input.on('dragend', (pointer, obj) => {
       if (this.isGameOver) return;
       this.ghost.clear();
+      const moved = Phaser.Math.Distance.Between(pointer.downX, pointer.downY, pointer.upX, pointer.upY);
+      const held = pointer.upTime - pointer.downTime;
+      if (moved < TAP_DIST && held < TAP_MS) {
+        // 탭: 제자리로 돌려놓고 회전
+        obj.setDepth(10);
+        obj.setPosition(TRAY_SLOT_X[obj.data.values.slot], TRAY_Y).setScale(TRAY_SCALE);
+        this.rotatePiece(obj);
+        return;
+      }
       const pos = this.pieceGridPos(obj);
       const { shape, color } = obj.data.values;
       if (pos && this.board.canPlace(shape, pos.row, pos.col)) {
@@ -226,7 +385,7 @@ export class GameScene extends Phaser.Scene {
   // ---------- 게임 규칙 ----------
   commitPiece(obj, row, col, shape, color) {
     // 되돌리기용 스냅샷: 배치 직전 상태
-    this.undoSnapshot = { cells: this.board.snapshot(), score: this.score, tray: this.trayData() };
+    this.undoSnapshot = { cells: this.board.snapshot(), score: this.score, tray: this.trayData(), streak: this.streak };
 
     this.board.place(shape, row, col, color);
     this.tray[obj.data.values.slot] = null;
@@ -239,22 +398,40 @@ export class GameScene extends Phaser.Scene {
 
     const { lines, cleared } = this.board.clearLines();
     if (lines > 0) {
+      this.streak += 1;
+      const mult = Math.min(this.streak, STREAK_MAX_MULT);
       const b = shapeBounds(shape);
       const origin = { x: GRID_X + (col + b.cols / 2) * CELL, y: GRID_Y + (row + b.rows / 2) * CELL };
       this.animateClear(cleared, origin, lines);
       let gain = lines * SCORE_PER_LINE;
       if (lines >= 2) gain += lines * COMBO_BONUS;
+      gain *= mult;
       this.time.delayedCall(120, () => this.addScore(gain));
-      sfx.clear(lines); haptic.success(lines);
-      this.popScore(gain, origin, lines);
-      this.popText(CLEAR_WORDS[Math.min(lines, CLEAR_WORDS.length) - 1], lines >= 2 ? COLORS.accent : '#2b6cb0', lines);
+      sfx.clear(lines + mult - 1); haptic.success(lines);
+      this.popScore(gain, origin, lines, mult);
+      const word = CLEAR_WORDS[Math.min(lines, CLEAR_WORDS.length) - 1];
+      this.popText(mult >= 2 ? `${word} 연속 ×${mult}` : word, lines >= 2 || mult >= 2 ? COLORS.accent : '#2b6cb0', Math.max(lines, mult));
       this.cameras.main.shake(140 + 40 * lines, 0.006 + 0.004 * lines);
-      if (lines >= 2) this.screenFlash(0.18 + 0.08 * Math.min(lines, 4));
+      if (lines >= 2 || mult >= 3) this.screenFlash(0.18 + 0.08 * Math.min(Math.max(lines, mult), 4));
+    } else {
+      if (this.streak >= 2) this.popText('연속 끊김', COLORS.textDim);
+      this.streak = 0;
     }
+    this.refreshStreakBadge();
 
     if (this.trayEmpty()) this.refillTray();
     this.refreshUndoButton();
     this.time.delayedCall(60, () => this.checkGameOver());
+  }
+
+  refreshStreakBadge() {
+    const mult = Math.min(this.streak, STREAK_MAX_MULT);
+    if (mult >= 2) {
+      this.streakBadge.setText(`연속 ×${mult}`).setVisible(true);
+      this.tweens.add({ targets: this.streakBadge, scale: 1.25, duration: 90, yoyo: true });
+    } else {
+      this.streakBadge.setVisible(false);
+    }
   }
 
   performUndo() {
@@ -262,6 +439,8 @@ export class GameScene extends Phaser.Scene {
     if (!s) return;
     this.board.restore(s.cells);
     this.score = s.score;
+    this.streak = s.streak || 0;
+    this.refreshStreakBadge();
     this.scoreText.setText(String(this.score));
     for (const p of this.tray) if (p) p.destroy();
     this.tray = s.tray.map(d => d ? this.makePiece(d.slot, d.shape, d.color) : null);
@@ -317,8 +496,8 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: this.flash, alpha: 0, duration: 260, ease: 'Quad.Out' });
   }
 
-  popScore(gain, origin, lines) {
-    const t = this.add.text(origin.x, origin.y, `+${gain}`, {
+  popScore(gain, origin, lines, mult = 1) {
+    const t = this.add.text(origin.x, origin.y, mult >= 2 ? `+${gain} ×${mult}` : `+${gain}`, {
       fontFamily: FONT_DISPLAY, fontStyle: 'bold', fontSize: `${44 + 8 * Math.min(lines, 4)}px`, color: '#f3e9d6',
       stroke: '#24375c', strokeThickness: 8,
     }).setOrigin(0.5).setDepth(36).setScale(0.4);
@@ -339,7 +518,7 @@ export class GameScene extends Phaser.Scene {
 
   popText(msg, color, lines = 1) {
     const size = 60 + 12 * Math.min(Math.max(lines - 1, 0), 4);
-    const t = this.add.text(GAME_WIDTH / 2, GRID_Y - 60, msg, {
+    const t = this.add.text(GAME_WIDTH / 2, GRID_Y + GRID_SIZE * CELL * 0.42, msg, {
       fontFamily: FONT_DISPLAY, fontStyle: 'bold', fontSize: `${size}px`, color,
       stroke: '#f3e9d6', strokeThickness: 10,
     }).setOrigin(0.5).setDepth(45).setScale(0.3).setAngle(-6 + Math.random() * 12);
@@ -354,6 +533,7 @@ export class GameScene extends Phaser.Scene {
     this.isGameOver = true;
     this.gameOverCount += 1;
     this.refreshUndoButton();
+    this.refreshItemBar();
     sfx.gameOver(); haptic.fail();
     this.showGameOver();
   }
@@ -432,12 +612,7 @@ export class GameScene extends Phaser.Scene {
         if (!ok) return;
         this.continueUsed = true;
         ui.destroy();
-        this.board.clearRandomCells(20);
-        this.renderBoard();
-        this.isGameOver = false;
-        this.undoSnapshot = null;
-        this.refreshUndoButton();
-        this.checkGameOver();
+        this.continueGame();
       }));
     }
 
@@ -445,6 +620,25 @@ export class GameScene extends Phaser.Scene {
       if (this.gameOverCount % 3 === 0) await Ads.showInterstitial();
       this.scene.restart();
     }));
+  }
+
+  // 이어하기: 대기열 조각 중 하나는 반드시 들어갈 수 있을 때까지 칸을 비웁니다.
+  continueGame() {
+    const fits = () => this.tray.some(p => p && this.board.anyPlacement(p.data.values.shape));
+    let batch = 20;
+    while (!fits() && this.board.filledCount() > 0) {
+      this.board.clearRandomCells(batch);
+      batch = 10;
+    }
+    this.renderBoard();
+    this.isGameOver = false;
+    this.streak = 0;
+    this.refreshStreakBadge();
+    this.undoSnapshot = null;
+    this.refreshUndoButton();
+    this.refreshItemBar();
+    this.popText('이어 짓기!', '#6b8e4e');
+    this.checkGameOver();
   }
 
   makeButton(x, y, label, color, onClick) {
