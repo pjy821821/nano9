@@ -1,7 +1,7 @@
 import {
   GRID_SIZE, CELL, GRID_X, GRID_Y, TRAY_Y, ITEM_Y, TRAY_SCALE, GAME_WIDTH, GAME_HEIGHT,
   COLORS, PIECE_COLORS, SCORE_PER_CELL, SCORE_PER_LINE, COMBO_BONUS, CLEAR_WORDS,
-  STORAGE_KEY, TUTORIAL_KEY, FONT_DISPLAY, FONT_UI, ITEMS, STREAK_MAX_MULT,
+  STORAGE_KEY, TUTORIAL_KEY, FONT_DISPLAY, FONT_UI, ITEMS, STREAK_MAX_MULT, REFILL_MODE,
 } from '../config.js';
 import { randomShape, shapeBounds, rotateShape } from '../shapes.js';
 import { Board } from '../board.js';
@@ -434,7 +434,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.refreshStreakBadge();
 
-    if (this.trayEmpty()) this.refillTray();
+    if (REFILL_MODE === 'each' || this.trayEmpty()) this.refillTray();
     this.refreshUndoButton();
     this.time.delayedCall(60, () => this.checkGameOver());
   }
