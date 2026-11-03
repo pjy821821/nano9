@@ -33,7 +33,7 @@ export class MenuScene extends Phaser.Scene {
       () => this.scene.start('Game', { mode: 'endless' }));
 
     this.modeButton(GAME_WIDTH / 2, 700, `오늘의 조각보 · ${formatKey(day)}`,
-      todayBest ? `오늘 최고 ${todayBest.score.toLocaleString()}점 · 다시 도전` : '오늘은 모두가 같은 조각 순서로 겨뤄요', 0xd9463b,
+      todayBest ? `오늘 최고 ${todayBest.score.toLocaleString()}점 · 다시 도전` : '모두 같은 조각 순서 · 3개를 다 써야 보충', 0xd9463b,
       () => this.scene.start('Game', { mode: 'daily', dayKey: day }));
 
     this.modeButton(GAME_WIDTH / 2, 860, '내 기록', '무한 모드 상위 10 · 최근 7일 데일리', 0x6b8e4e, () => this.showRecords());

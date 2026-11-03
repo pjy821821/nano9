@@ -77,7 +77,7 @@ export class GameScene extends Phaser.Scene {
       fontFamily: FONT_UI, fontSize: '28px', color: COLORS.textDim,
     }).setOrigin(0.5);
 
-    this.add.text(GAME_WIDTH / 2, 230, this.mode === 'daily' ? `오늘의 조각보 · ${formatKey(this.dayKey)}` : '무한 모드', {
+    this.add.text(GAME_WIDTH / 2, 230, this.mode === 'daily' ? `오늘의 조각보 · ${formatKey(this.dayKey)} · 조각 3개를 다 쓰면 보충` : '무한 모드', {
       fontFamily: FONT_UI, fontSize: '20px', color: this.mode === 'daily' ? COLORS.accent : COLORS.textDim,
     }).setOrigin(0.5);
 
@@ -434,7 +434,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.refreshStreakBadge();
 
-    if (REFILL_MODE === 'each' || this.trayEmpty()) this.refillTray();
+    if (REFILL_MODE[this.mode] === 'each' || this.trayEmpty()) this.refillTray();
     this.refreshUndoButton();
     this.time.delayedCall(60, () => this.checkGameOver());
   }

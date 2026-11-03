@@ -54,10 +54,13 @@ export const SCORE_PER_CELL = 1;          // 블록 1칸 놓을 때
 export const SCORE_PER_LINE = 10;         // 줄 1개 제거
 export const COMBO_BONUS = 10;            // 동시 제거 줄 수 2개 이상일 때 추가 (줄 수 * 보너스)
 
-// 대기열 보충 방식
+// 대기열 보충 방식 (모드별)
 //  'each': 조각을 하나 쓸 때마다 그 자리를 바로 채움 (선택권 넓음, 게임오버 드묾)
 //  'all' : 3개를 다 써야 한꺼번에 채움 (Block Blast 등 장르 표준, 긴장감 높음)
-export const REFILL_MODE = 'each';
+export const REFILL_MODE = {
+  endless: 'each',   // 무한 모드: 편하게 오래
+  daily: 'all',      // 오늘의 조각보: 하루 한 문제답게 빡빡하게
+};
 
 // 아이템: 1판당 기본 횟수. 다 쓰면 보상형 광고로 충전.
 export const ITEMS = {
