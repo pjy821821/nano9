@@ -8,6 +8,8 @@ import { Board } from '../board.js';
 import { Ads } from '../ads.js';
 import { sfx, haptic } from '../audio.js';
 import { makeHanjiTexture, makeScrapTexture, drawPatch, drawEmptyCell, drawBoardFrame, makeSeal } from '../art.js';
+import { Records } from '../records.js';
+import { dailyRng, formatKey } from '../rng.js';
 
 const TRAY_SLOTS = 3;
 const TRAY_SLOT_X = [GAME_WIDTH * 0.2, GAME_WIDTH * 0.5, GAME_WIDTH * 0.8];
@@ -22,8 +24,16 @@ const TAP_MS = 350;
 export class GameScene extends Phaser.Scene {
   constructor() { super('Game'); }
 
+  // 모드: 'endless'(무한) 또는 'daily'(오늘의 조각보, 날짜 시드로 조각 순서 고정)
+  init(data = {}) {
+    this.mode = data.mode || 'endless';
+    this.dayKey = data.dayKey || null;
+    this.rng = this.mode === 'daily' ? dailyRng(this.dayKey) : Math.random;
+  }
+
   create() {
     this.board = new Board();
+    this.maxStreak = 0;
     this.score = 0;
     this.best = this.loadBest();
     this.continueUsed = false;
@@ -65,6 +75,10 @@ export class GameScene extends Phaser.Scene {
     }).setOrigin(0.5);
     this.bestText = this.add.text(GAME_WIDTH / 2, 196, `최고 ${this.best}`, {
       fontFamily: FONT_UI, fontSize: '28px', color: COLORS.textDim,
+    }).setOrigin(0.5);
+
+    this.add.text(GAME_WIDTH / 2, 230, this.mode === 'daily' ? `오늘의 조각보 · ${formatKey(this.dayKey)}` : '무한 모드', {
+      fontFamily: FONT_UI, fontSize: '20px', color: this.mode === 'daily' ? COLORS.accent : COLORS.textDim,
     }).setOrigin(0.5);
 
     // 연속 제거 배율 배지 (스트릭 2 이상일 때만 표시)
@@ -282,7 +296,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ---------- 조각 대기열 ----------
-  makePiece(slot, shape = randomShape(), color = PIECE_COLORS[Math.floor(Math.random() * PIECE_COLORS.length)], animate = true) {
+  makePiece(slot, shape = randomShape(this.rng), color = PIECE_COLORS[Math.floor(this.rng() * PIECE_COLORS.length)], animate = true) {
     const { rows, cols } = shapeBounds(shape);
     const container = this.add.container(TRAY_SLOT_X[slot], TRAY_Y).setDepth(10);
     const w = cols * CELL, h = rows * CELL;
@@ -399,6 +413,7 @@ export class GameScene extends Phaser.Scene {
     const { lines, cleared } = this.board.clearLines();
     if (lines > 0) {
       this.streak += 1;
+      if (this.streak > this.maxStreak) this.maxStreak = this.streak;
       const mult = Math.min(this.streak, STREAK_MAX_MULT);
       const b = shapeBounds(shape);
       const origin = { x: GRID_X + (col + b.cols / 2) * CELL, y: GRID_Y + (row + b.rows / 2) * CELL };
@@ -588,38 +603,100 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ---------- 게임오버 / 수익화 지점 ----------
+  // 기록 저장은 최종 게임오버(이어 짓기까지 끝난 뒤)에 한 번만
+  saveRecord() {
+    if (this.recordSaved) return this.recordNote;
+    this.recordSaved = true;
+    let note = '';
+    if (this.mode === 'daily') {
+      const { improved } = Records.addDaily(this.dayKey, this.score, this.maxStreak);
+      const rank = Records.dailyRankAmongDays(this.dayKey, this.score);
+      note = improved ? `오늘 최고 기록! 내 데일리 중 ${rank}위` : '오늘 최고 기록은 그대로예요';
+    } else {
+      const rank = Records.addEndless(this.score, this.maxStreak);
+      note = rank === 1 ? '새 1위 기록!' : rank > 0 ? `내 기록 ${rank}위에 올랐어요` : '상위 10위 안에는 못 들었어요';
+    }
+    this.recordNote = note;
+    return note;
+  }
+
+  shareText() {
+    const label = this.mode === 'daily' ? `오늘의 조각보 ${formatKey(this.dayKey)}` : '무한 모드';
+    const streak = this.maxStreak >= 2 ? ` · 최고 연속 ×${Math.min(this.maxStreak, STREAK_MAX_MULT)}` : '';
+    return `🧵 조각보 · ${label}\n${this.score.toLocaleString()}점${streak}\n#조각보 #블록퍼즐`;
+  }
+
+  // 공유: 기기 공유 시트 → 안 되면 클립보드 복사. 반드시 터치 핸들러 안에서 직접 호출해야 합니다.
+  shareResult(btn) {
+    const text = this.shareText();
+    const done = (msg) => btn.label.setText(msg);
+    try {
+      if (navigator.share) {
+        navigator.share({ text }).then(() => done('공유했어요')).catch(() => this.copyText(text, done));
+        return;
+      }
+    } catch { /* 아래 복사로 */ }
+    this.copyText(text, done);
+  }
+
+  copyText(text, done) {
+    try {
+      navigator.clipboard.writeText(text).then(() => done('복사했어요')).catch(() => done('복사가 안 돼요'));
+    } catch { done('복사가 안 돼요'); }
+  }
+
   showGameOver() {
+    const canContinue = !this.continueUsed && Ads.rewardedReady();
+    const note = canContinue ? '' : this.saveRecord();
+
     const ui = this.add.container(0, 0).setDepth(100);
     const dim = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x2a2320, 0.55).setOrigin(0);
     const panel = this.add.graphics();
+    const PH = canContinue ? 640 : 560, PY = 360;
     panel.fillStyle(COLORS.frameDark, 1);
-    panel.fillRoundedRect(64, 386, GAME_WIDTH - 120, 520, 28);
+    panel.fillRoundedRect(64, PY + 6, GAME_WIDTH - 120, PH, 28);
     panel.fillStyle(COLORS.frame, 1);
-    panel.fillRoundedRect(60, 380, GAME_WIDTH - 120, 520, 28);
+    panel.fillRoundedRect(60, PY, GAME_WIDTH - 120, PH, 28);
     panel.lineStyle(1.5, 0xf3e9d6, 0.4);
-    panel.strokeRoundedRect(74, 394, GAME_WIDTH - 148, 492, 20);
-    const title = this.add.text(GAME_WIDTH / 2, 452, '더 붙일 자리가 없어요', {
+    panel.strokeRoundedRect(74, PY + 14, GAME_WIDTH - 148, PH - 28, 20);
+    const title = this.add.text(GAME_WIDTH / 2, PY + 72, '더 붙일 자리가 없어요', {
       fontFamily: FONT_DISPLAY, fontStyle: 'bold', fontSize: '44px', color: COLORS.textOnFrame,
     }).setOrigin(0.5);
-    const scoreLine = this.add.text(GAME_WIDTH / 2, 530, `점수 ${this.score}   최고 ${this.best}`, {
+    const scoreLine = this.add.text(GAME_WIDTH / 2, PY + 146, `점수 ${this.score.toLocaleString()}   최고 ${this.best.toLocaleString()}`, {
       fontFamily: FONT_UI, fontSize: '30px', color: '#cdbb9c',
     }).setOrigin(0.5);
-    ui.add([dim, panel, title, scoreLine]);
+    const noteLine = this.add.text(GAME_WIDTH / 2, PY + 196, note, {
+      fontFamily: FONT_UI, fontSize: '26px', color: '#e8b63a',
+    }).setOrigin(0.5);
+    ui.add([dim, panel, title, scoreLine, noteLine]);
 
-    if (!this.continueUsed && Ads.rewardedReady()) {
-      ui.add(this.makeButton(GAME_WIDTH / 2, 640, '▶ 광고 보고 이어 짓기', 0x6b8e4e, async () => {
+    let y = PY + 270;
+    if (canContinue) {
+      ui.add(this.makeButton(GAME_WIDTH / 2, y, '▶ 광고 보고 이어 짓기', 0x6b8e4e, async () => {
         const ok = await Ads.showRewarded();
         if (!ok) return;
         this.continueUsed = true;
         ui.destroy();
         this.continueGame();
       }));
+      y += 110;
     }
 
-    ui.add(this.makeButton(GAME_WIDTH / 2, 760, '새 보 짓기', 0xe8b63a, async () => {
+    ui.add(this.makeButton(GAME_WIDTH / 2, y, this.mode === 'daily' ? '오늘 다시 도전' : '새 보 짓기', 0xe8b63a, async () => {
+      if (!this.recordSaved) this.saveRecord();
       if (this.gameOverCount % 3 === 0) await Ads.showInterstitial();
-      this.scene.restart();
+      this.scene.restart({ mode: this.mode, dayKey: this.dayKey });
     }));
+    y += 110;
+
+    // 공유 / 메뉴 (반폭 버튼 두 개)
+    const share = this.makeButton(GAME_WIDTH / 2 - 125, y, '공유하기', 0x7fb2d6, null, { width: 230, immediate: true });
+    share.on('pointerdown', () => this.shareResult(share));
+    const menu = this.makeButton(GAME_WIDTH / 2 + 125, y, '처음으로', 0xcdbb9c, () => {
+      if (!this.recordSaved) this.saveRecord();
+      this.scene.start('Menu');
+    }, { width: 230 });
+    ui.add([share, menu]);
   }
 
   // 이어하기: 대기열 조각 중 하나는 반드시 들어갈 수 있을 때까지 칸을 비웁니다.
@@ -641,19 +718,23 @@ export class GameScene extends Phaser.Scene {
     this.checkGameOver();
   }
 
-  makeButton(x, y, label, color, onClick) {
+  // immediate: 공유처럼 사용자 제스처 안에서 바로 실행해야 하는 버튼은 트윈을 기다리지 않습니다.
+  makeButton(x, y, label, color, onClick, { width = 480, immediate = false } = {}) {
+    const W = width, H = 88;
     const c = this.add.container(x, y);
     const bg = this.add.graphics();
-    bg.fillStyle(0x000000, 0.25); bg.fillRoundedRect(-238, -40, 480, 88, 22);
-    bg.fillStyle(color, 1); bg.fillRoundedRect(-240, -44, 480, 88, 22);
-    bg.lineStyle(1.5, 0xf3e9d6, 0.6); bg.strokeRoundedRect(-232, -36, 464, 72, 16);
-    const t = this.add.text(0, 0, label, { fontFamily: FONT_UI, fontSize: '32px', color: '#1d1a17' }).setOrigin(0.5);
+    bg.fillStyle(0x000000, 0.25); bg.fillRoundedRect(-W / 2 + 2, -H / 2 + 4, W, H, 22);
+    bg.fillStyle(color, 1); bg.fillRoundedRect(-W / 2, -H / 2, W, H, 22);
+    bg.lineStyle(1.5, 0xf3e9d6, 0.6); bg.strokeRoundedRect(-W / 2 + 8, -H / 2 + 8, W - 16, H - 16, 16);
+    const t = this.add.text(0, 0, label, { fontFamily: FONT_UI, fontSize: W < 300 ? '28px' : '32px', color: '#1d1a17' }).setOrigin(0.5);
     c.add([bg, t]);
-    c.setSize(480, 88);
-    c.setInteractive(new Phaser.Geom.Rectangle(0, 0, 480, 88), Phaser.Geom.Rectangle.Contains);
+    c.label = t;
+    c.setSize(W, H);
+    c.setInteractive(new Phaser.Geom.Rectangle(0, 0, W, H), Phaser.Geom.Rectangle.Contains);
     c.on('pointerdown', () => {
       sfx.button(); haptic.light();
-      this.tweens.add({ targets: c, scale: 0.95, duration: 60, yoyo: true, onComplete: onClick });
+      this.tweens.add({ targets: c, scale: 0.95, duration: 60, yoyo: true, onComplete: immediate ? undefined : onClick });
+      if (immediate && onClick) onClick();
     });
     return c;
   }

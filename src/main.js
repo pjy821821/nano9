@@ -1,4 +1,5 @@
 import { GAME_WIDTH, GAME_HEIGHT, COLORS } from './config.js';
+import { MenuScene } from './scenes/MenuScene.js';
 import { GameScene } from './scenes/GameScene.js';
 
 const config = {
@@ -12,7 +13,7 @@ const config = {
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
   input: { activePointers: 1 },
-  scene: [GameScene],
+  scene: [MenuScene, GameScene],
 };
 
 // 웹폰트(고운바탕, 고운돋움)가 준비된 뒤 시작합니다. 1.5초 안에 안 오면 대체 폰트로 시작합니다.
