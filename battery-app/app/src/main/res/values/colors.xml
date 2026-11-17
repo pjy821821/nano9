@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#146C32</color>
+    <color name="state_charging">#146C32</color>
+    <color name="state_warning">#8A4B00</color>
+    <color name="state_low">#B3261E</color>
+</resources>

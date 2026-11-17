@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">배터리</string>
+    <string name="widget_label">배터리 계기판</string>
+    <string name="widget_description">잔량, 충전 전력, 완충까지 남은 시간</string>
+
+    <string name="nav_home">홈</string>
+    <string name="nav_chart">그래프</string>
+    <string name="nav_sessions">기록</string>
+    <string name="nav_settings">설정</string>
+
+    <string name="state_charging">충전 중</string>
+    <string name="state_discharging">사용 중</string>
+    <string name="state_full">완충</string>
+    <string name="state_low">배터리 부족</string>
+    <string name="state_not_charging">충전 대기</string>
+    <string name="time_to_full">완충까지 %1$s</string>
+    <string name="power_hint">배터리에 실제 들어가는 전력 (전압 × 전류)</string>
+    <string name="connected_charger">연결된 충전기</string>
+    <string name="charger_unnamed">이름 없는 충전기</string>
+    <string name="rename">이름 바꾸기</string>
+    <string name="current_session">이번 세션</string>
+    <string name="no_session">충전기를 연결하면 세션 기록이 시작됩니다</string>
+
+    <string name="channel_monitor">충전 상태</string>
+    <string name="channel_monitor_desc">충전 중 전력과 잔량을 상시 표시</string>
+    <string name="channel_alerts">배터리 알림</string>
+    <string name="channel_alerts_desc">충전 한계 도달, 온도 경고</string>
+    <string name="notif_charging_title">%1$s W로 충전 중 · %2$d%%</string>
+    <string name="notif_discharging_title">배터리 %1$d%% · %2$s</string>
+    <string name="notif_monitoring">배터리 모니터링 중</string>
+    <string name="notif_limit_title">충전 %1$d%% 도달</string>
+    <string name="notif_limit_text">배터리 수명을 위해 지금 분리하는 것이 좋습니다</string>
+    <string name="notif_temp_title">배터리 온도 %1$s °C</string>
+    <string name="notif_temp_text">충전을 잠시 멈추거나 케이스를 벗겨 주세요</string>
+    <string name="action_open_chart">그래프 열기</string>
+
+    <string name="settings_notifications">알림</string>
+    <string name="settings_charge_limit">충전 한계 알람</string>
+    <string name="settings_charge_limit_desc" formatted="false">이 잔량에 도달하면 알려줍니다. 배터리 수명에는 80% 전후가 유리합니다.</string>
+    <string name="settings_temp_warn">온도 경고</string>
+    <string name="settings_ongoing">충전 중 상시 알림</string>
+    <string name="settings_monitoring">백그라운드 모니터링</string>
+    <string name="settings_monitoring_desc">꽂으면 자동으로 세션을 기록합니다. 끄면 앱을 열어 둔 동안만 측정합니다.</string>
+    <string name="settings_measurement">측정</string>
+    <string name="settings_calibration">전류 단위·부호 보정</string>
+    <string name="settings_recalibrate">재보정</string>
+    <string name="settings_design_capacity">설계 용량 (mAh)</string>
+    <string name="settings_display">화면</string>
+    <string name="settings_theme">테마</string>
+    <string name="theme_system">시스템</string>
+    <string name="theme_light">라이트</string>
+    <string name="theme_dark">다크</string>
+    <string name="theme_amoled">AMOLED</string>
+    <string name="settings_dynamic_color">다이내믹 컬러</string>
+    <string name="settings_device">기기 정보</string>
+    <string name="device_cycles">충전 사이클</string>
+    <string name="device_health_os">건강 등급 (OS)</string>
+    <string name="device_health_est">추정 건강도</string>
+    <string name="device_technology">셀 종류</string>
+    <string name="unknown">알 수 없음</string>
+
+    <string name="sessions_this_week">이번 주</string>
+    <string name="sessions_count">충전 횟수</string>
+    <string name="sessions_avg_power">평균 전력</string>
+    <string name="sessions_total">총 충전량</string>
+    <string name="sessions_empty">아직 기록된 충전 세션이 없습니다</string>
+    <string name="session_charged">들어간 양</string>
+    <string name="session_level">잔량 변화</string>
+    <string name="session_duration">소요 시간</string>
+    <string name="session_peak_power">최대 전력</string>
+    <string name="session_peak_temp">온도 최고</string>
+    <string name="session_incomplete">기록이 중간에 끊긴 세션</string>
+    <string name="back">뒤로</string>
+</resources>

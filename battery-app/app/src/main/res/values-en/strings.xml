@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Battery</string>
+    <string name="widget_label">Battery gauge</string>
+    <string name="widget_description">Level, charging power and time to full</string>
+
+    <string name="nav_home">Home</string>
+    <string name="nav_chart">Chart</string>
+    <string name="nav_sessions">History</string>
+    <string name="nav_settings">Settings</string>
+
+    <string name="state_charging">Charging</string>
+    <string name="state_discharging">In use</string>
+    <string name="state_full">Full</string>
+    <string name="state_low">Battery low</string>
+    <string name="state_not_charging">Not charging</string>
+    <string name="time_to_full">%1$s to full</string>
+    <string name="power_hint">Power actually entering the battery (voltage × current)</string>
+    <string name="connected_charger">Connected charger</string>
+    <string name="charger_unnamed">Unnamed charger</string>
+    <string name="rename">Rename</string>
+    <string name="current_session">This session</string>
+    <string name="no_session">Plug in a charger to start recording a session</string>
+
+    <string name="channel_monitor">Charging status</string>
+    <string name="channel_monitor_desc">Ongoing power and level while charging</string>
+    <string name="channel_alerts">Battery alerts</string>
+    <string name="channel_alerts_desc">Charge limit reached, temperature warning</string>
+    <string name="notif_charging_title">Charging at %1$s W · %2$d%%</string>
+    <string name="notif_discharging_title">Battery %1$d%% · %2$s</string>
+    <string name="notif_monitoring">Monitoring battery</string>
+    <string name="notif_limit_title">Charged to %1$d%%</string>
+    <string name="notif_limit_text">Unplugging now is kinder to the battery</string>
+    <string name="notif_temp_title">Battery temperature %1$s °C</string>
+    <string name="notif_temp_text">Pause charging or remove the case for a while</string>
+    <string name="action_open_chart">Open chart</string>
+
+    <string name="settings_notifications">Notifications</string>
+    <string name="settings_charge_limit">Charge limit alarm</string>
+    <string name="settings_charge_limit_desc" formatted="false">Notifies at this level. Around 80% is kinder to battery life.</string>
+    <string name="settings_temp_warn">Temperature warning</string>
+    <string name="settings_ongoing">Ongoing notification while charging</string>
+    <string name="settings_monitoring">Background monitoring</string>
+    <string name="settings_monitoring_desc">Records a session automatically when plugged in. Off: measures only while the app is open.</string>
+    <string name="settings_measurement">Measurement</string>
+    <string name="settings_calibration">Current unit and sign calibration</string>
+    <string name="settings_recalibrate">Recalibrate</string>
+    <string name="settings_design_capacity">Design capacity (mAh)</string>
+    <string name="settings_display">Display</string>
+    <string name="settings_theme">Theme</string>
+    <string name="theme_system">System</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_amoled">AMOLED</string>
+    <string name="settings_dynamic_color">Dynamic color</string>
+    <string name="settings_device">Device</string>
+    <string name="device_cycles">Charge cycles</string>
+    <string name="device_health_os">Health (OS)</string>
+    <string name="device_health_est">Estimated health</string>
+    <string name="device_technology">Cell type</string>
+    <string name="unknown">Unknown</string>
+
+    <string name="sessions_this_week">This week</string>
+    <string name="sessions_count">Sessions</string>
+    <string name="sessions_avg_power">Avg power</string>
+    <string name="sessions_total">Total charged</string>
+    <string name="sessions_empty">No charging sessions recorded yet</string>
+    <string name="session_charged">Charged</string>
+    <string name="session_level">Level</string>
+    <string name="session_duration">Duration</string>
+    <string name="session_peak_power">Peak power</string>
+    <string name="session_peak_temp">Peak temp</string>
+    <string name="session_incomplete">Recording was interrupted</string>
+    <string name="back">Back</string>
+</resources>
