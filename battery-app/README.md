@@ -31,6 +31,13 @@ SDK 없는 환경(CI, 헤드리스)에서는 `:core`만 빌드·테스트된다.
 
 Android Studio에서는 `battery-app/` 폴더를 열면 된다.
 
+로컬 환경 메모(회사 PC, 2026-11-24): Android Studio는 zip 배포판을 `%LOCALAPPDATA%\Programs\android-studio`에 풀어 설치했고
+(winget 무음 설치는 관리자 권한 단계에서 조용히 실패함), SDK는 `%LOCALAPPDATA%\Android\Sdk`에 명령줄 도구로
+platform-tools, platforms/android-36, build-tools/36.0.0만 설치했다. 시스템 JDK가 8이라 `~/.gradle/gradle.properties`에
+`org.gradle.java.home`을 Android Studio의 `jbr`로 지정해 두었다. 새 PC에서는 Android Studio 설치 후 `local.properties`의
+`sdk.dir`만 맞추면 된다.
+**미해결(2026-11-24):** JBR이 Java 25라 Gradle 8.14.3이 "25.0.4"만 찍고 실패한다(8.14는 Java 24까지 지원). Gradle 래퍼를 9.x로 올리거나 Gradle용 JDK 17~21을 따로 두고 `org.gradle.java.home`을 그쪽으로 바꿔야 한다.
+
 ### CI (GitHub Actions)
 
 `.github/workflows/battery-app-build.yml`이 `battery-app/**` 변경을 푸시할 때마다 JDK 17 + 러너의 Android SDK로
