@@ -31,6 +31,12 @@ SDK 없는 환경(CI, 헤드리스)에서는 `:core`만 빌드·테스트된다.
 
 Android Studio에서는 `battery-app/` 폴더를 열면 된다.
 
+### CI (GitHub Actions)
+
+`.github/workflows/battery-app-build.yml`이 `battery-app/**` 변경을 푸시할 때마다 JDK 17 + 러너의 Android SDK로
+`:core:test`와 `:app:assembleDebug`를 돌린다. 실행 페이지의 Artifacts에서 `battery-app-debug-apk`(디버그 APK)와
+`battery-app-test-reports`(테스트 리포트, Room 스키마 JSON)를 내려받을 수 있다. 로컬에 SDK가 없어도 이 경로로 빌드 확인이 된다.
+
 ## 구조 (app)
 
 ```
@@ -63,7 +69,7 @@ kr.techbridge.battery
 ## 현재 상태와 다음 단계
 
 - [x] core 모듈: 구현 + 단위 테스트 22개 통과
-- [x] app 모듈: 전체 골격 작성. **아직 Android SDK 환경에서 컴파일하지 않았다.** 첫 빌드에서 import·API 시그니처 오류가 나올 수 있다.
+- [x] app 모듈: 전체 골격 작성. 2026-11-24 GitHub Actions에서 첫 컴파일 성공(`assembleDebug`, 경고 0). **실기기에서는 아직 실행하지 않았다.**
 - [ ] 실기기(삼성, 픽셀)에서 전류 단위·부호 확인, 보정표 1판
 - [ ] ViewModel 도입(현재 화면이 Repository/StateFlow를 직접 구독)
 - [ ] 서비스 사망 복구(WorkManager 충전 제약 작업), 배터리 최적화 제외 안내
