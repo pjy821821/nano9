@@ -11,6 +11,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kr.techbridge.battery.core.Calibration
+import kr.techbridge.battery.core.ChargerMatcher
 import kr.techbridge.battery.core.CurrentCalibrator
 import kr.techbridge.battery.core.RawSample
 import kr.techbridge.battery.core.SessionTracker
@@ -36,6 +37,9 @@ class SessionRecorder(private val context: Context, private val c: AppContainer)
     private var lastWidgetMs = 0L
     private var limitNotified = false
     private var tempNotified = false
+    /** 세션 초반 전력(mW). 협상값으로 못 맞힌 충전기를 전력으로 다시 맞히는 데 쓴다. */
+    private val powerWindow = ArrayList<Double>(POWER_MATCH_SAMPLES)
+    private var powerMatchDone = false
 
     suspend fun run() = coroutineScope {
         launch {
@@ -96,14 +100,20 @@ class SessionRecorder(private val context: Context, private val c: AppContainer)
             when (event) {
                 is SessionTracker.Event.Started -> {
                     val snapshot = tracker.current ?: continue
-                    sessionId = repo.startSession(snapshot, chargerId = settings.lastChargerId)
+                    // 1단계: 연결 종류 + 협상 전류·전압이 같은 충전기가 하나뿐이면 꽂자마자 이름이 붙는다.
+                    val fp = raw.fingerprint
+                    val matched = ChargerMatcher.matchByNegotiation(fp, repo.knownChargers())
+                    sessionId = repo.startSession(snapshot, chargerId = matched, fingerprint = fp)
                     lastSessionWriteMs = sample.timestampMs
                     limitNotified = false
                     tempNotified = false
+                    powerWindow.clear()
+                    powerMatchDone = matched != null
                 }
                 is SessionTracker.Event.Progress -> {
                     val id = sessionId ?: continue
                     repo.addSample(id, sample)
+                    maybeMatchByPower(id, raw.plugType, sample.powerMw)
                     if (sample.timestampMs - lastSessionWriteMs >= SESSION_WRITE_INTERVAL_MS) {
                         repo.updateSession(id, event.snapshot)
                         lastSessionWriteMs = sample.timestampMs
@@ -125,6 +135,17 @@ class SessionRecorder(private val context: Context, private val c: AppContainer)
             runCatching { BatteryWidget().updateAll(context) }
         }
         return raw.plugged
+    }
+
+    /** 2단계: 초반 [POWER_MATCH_SAMPLES]개 샘플의 전력 중앙값이 어느 한 충전기의 대표 전력과만 맞으면 그 이름을 붙인다. */
+    private suspend fun maybeMatchByPower(sessionId: Long, plugType: Int, powerMw: Double) {
+        if (powerMatchDone) return
+        if (powerMw > 0.0) powerWindow += powerMw
+        if (powerWindow.size < POWER_MATCH_SAMPLES) return
+        powerMatchDone = true
+        val median = ChargerMatcher.median(powerWindow)
+        val matched = ChargerMatcher.matchByPower(plugType, median, c.repository.knownChargers()) ?: return
+        c.repository.assignChargerIfUnset(sessionId, matched)
     }
 
     private suspend fun maybeCalibrate(raw: RawSample) {
@@ -181,5 +202,7 @@ class SessionRecorder(private val context: Context, private val c: AppContainer)
         const val WIDGET_INTERVAL_MS = 30_000L
         // 꽂혀 있으면 1초 간격이므로 2분. 충전 카운터 눈금(삼성 약 3.6 mAh)이 약한 USB 충전에서도 움직일 시간이다.
         const val CALIBRATION_WINDOW = 120
+        /** 꽂힌 뒤 1분. 초반 전력은 충전기 종류를 가장 잘 드러내고, 완충 근처 트리클보다 앞선다. */
+        const val POWER_MATCH_SAMPLES = 60
     }
 }

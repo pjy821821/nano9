@@ -29,7 +29,11 @@ class BatteryReader(private val context: Context) {
 
     fun fromIntent(intent: Intent, nowMs: Long = System.currentTimeMillis()): RawSample {
         val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)
-        val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
+        val plugType = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
+        val plugged = plugType != 0
+        // 협상된 최대 충전 전류·전압. 공개 상수가 없는(@hide) 확장 키라 문자열로 읽는다. 없거나 0이면 null.
+        val maxCurrent = intent.getIntExtra("max_charging_current", 0).toLong().takeIf { it > 0 }
+        val maxVoltage = intent.getIntExtra("max_charging_voltage", 0).toLong().takeIf { it > 0 }
         val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
         val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, 100).takeIf { it > 0 } ?: 100
         val percent = if (level >= 0) (level * 100 / scale) else bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
@@ -50,6 +54,9 @@ class BatteryReader(private val context: Context) {
             plugged = plugged,
             charging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL,
             chargeCounterUah = chargeCounter,
+            plugType = plugType,
+            maxChargingCurrentUa = maxCurrent,
+            maxChargingVoltageUv = maxVoltage,
         )
     }
 
