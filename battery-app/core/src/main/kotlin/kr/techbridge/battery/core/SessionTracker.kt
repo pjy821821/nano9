@@ -7,6 +7,7 @@ package kr.techbridge.battery.core
  * - 뺀 샘플이 들어오면 세션을 끝낸다(completed = true).
  * - 꽂힌 상태에서 샘플 간격이 [gapToleranceMs]를 넘으면 서비스가 죽었다 살아난 것으로 보고
  *   이전 세션을 completed = false로 끝내고 새 세션을 시작한다.
+ * - 서비스가 죽었다 살아났을 때 저장된 미완료 세션을 [resume]으로 이어받을 수 있다.
  *
  * 충전량은 양의 전류를 사다리꼴 적분한다. 전력 평균은 시간 가중 평균이다.
  */
@@ -34,7 +35,7 @@ class SessionTracker(
         }
 
         if (s.plugged) {
-            val cur = builder ?: Builder(s).also {
+            val cur = builder ?: Builder.fresh(s).also {
                 builder = it
                 out += Event.Started(s.timestampMs, s.levelPercent)
             }
@@ -49,23 +50,35 @@ class SessionTracker(
         return out
     }
 
+    /**
+     * 저장된 미완료 세션을 이어받는다. 다음 꽂힌 샘플부터 적분을 계속하므로 Started 이벤트는 나지 않는다.
+     * 호출자는 아직 꽂혀 있고 마지막 기록이 [gapToleranceMs] 안쪽일 때만 불러야 한다. 그 밖이면 [onSample]의
+     * 간격 검사가 이어받은 세션을 미완료로 끝내고 새 세션을 시작한다.
+     */
+    fun resume(session: ChargingSession) {
+        builder = Builder.from(session)
+    }
+
     /** 외부에서 강제로 끝낼 때(서비스 종료 등). */
     fun flush(): ChargingSession? = builder?.snapshot(completed = false).also { builder = null }
 
-    private class Builder(first: Sample) {
-        val startMs = first.timestampMs
-        val startLevel = first.levelPercent
-        var lastMs = first.timestampMs
-        var lastLevel = first.levelPercent
-        var lastCurrentUa = first.currentUa.coerceAtLeast(0)
-        var lastPowerMw = first.powerMw.coerceAtLeast(0.0)
-        var chargedUah = 0.0
-        var powerMwMs = 0.0 // 전력 × 시간 적분(mW·ms), 평균용
-        var integratedMs = 0L // 적분에 쓴 시간. 뺀 뒤의 꼬리는 포함하지 않는다.
-        var peakPowerMw = lastPowerMw
-        var peakTempDeciC = first.temperatureDeciC
-        var count = 1
-
+    private class Builder(
+        val startMs: Long,
+        val startLevel: Int,
+        var lastMs: Long,
+        var lastLevel: Int,
+        /** 직전 샘플의 양의 전류(µA). 이어받은 직후에는 모르므로 0으로 두고 첫 사다리꼴만 절반 가중한다. */
+        var lastCurrentUa: Long,
+        var lastPowerMw: Double,
+        var chargedUah: Double,
+        /** 전력 × 시간 적분(mW·ms), 평균용. */
+        var powerMwMs: Double,
+        /** 적분에 쓴 시간. 뺀 뒤의 꼬리는 포함하지 않는다. */
+        var integratedMs: Long,
+        var peakPowerMw: Double,
+        var peakTempDeciC: Int,
+        var count: Int,
+    ) {
         fun add(s: Sample) {
             val dtMs = (s.timestampMs - lastMs).coerceAtLeast(0)
             val iUa = s.currentUa.coerceAtLeast(0)
@@ -101,6 +114,31 @@ class SessionTracker(
                 sampleCount = count,
                 completed = completed,
             )
+        }
+
+        companion object {
+            fun fresh(first: Sample): Builder {
+                val p = first.powerMw.coerceAtLeast(0.0)
+                return Builder(
+                    startMs = first.timestampMs, startLevel = first.levelPercent,
+                    lastMs = first.timestampMs, lastLevel = first.levelPercent,
+                    lastCurrentUa = first.currentUa.coerceAtLeast(0), lastPowerMw = p,
+                    chargedUah = 0.0, powerMwMs = 0.0, integratedMs = 0L,
+                    peakPowerMw = p, peakTempDeciC = first.temperatureDeciC, count = 1,
+                )
+            }
+
+            /** 저장된 스냅숏에서 복원. 적분 시간은 세션 길이로, 전력 적분은 평균 × 길이로 되돌린다. */
+            fun from(s: ChargingSession): Builder {
+                val integrated = (s.endMs - s.startMs).coerceAtLeast(0)
+                return Builder(
+                    startMs = s.startMs, startLevel = s.startLevel,
+                    lastMs = s.endMs, lastLevel = s.endLevel,
+                    lastCurrentUa = 0L, lastPowerMw = 0.0,
+                    chargedUah = s.chargedMicroAmpHours, powerMwMs = s.avgPowerMw * integrated, integratedMs = integrated,
+                    peakPowerMw = s.peakPowerMw, peakTempDeciC = s.peakTemperatureDeciC, count = s.sampleCount,
+                )
+            }
         }
     }
 

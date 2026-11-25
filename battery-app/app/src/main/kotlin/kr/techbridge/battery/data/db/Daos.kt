@@ -26,6 +26,10 @@ interface SessionDao {
     @Query("SELECT * FROM sessions WHERE completed = 1 ORDER BY startMs DESC LIMIT :limit")
     suspend fun recentCompleted(limit: Int): List<SessionEntity>
 
+    /** 끝맺지 못한 세션(서비스가 죽었거나 지금 진행 중). 오래된 것부터. */
+    @Query("SELECT * FROM sessions WHERE completed = 0 ORDER BY startMs")
+    suspend fun open(): List<SessionEntity>
+
     @Query("UPDATE sessions SET chargerId = :chargerId WHERE id = :sessionId")
     suspend fun setCharger(sessionId: Long, chargerId: Long?)
 
@@ -49,6 +53,9 @@ interface SampleDao {
 
     @Query("SELECT * FROM samples WHERE sessionId = :sessionId ORDER BY timestampMs")
     suspend fun forSession(sessionId: Long): List<SampleEntity>
+
+    @Query("SELECT * FROM samples WHERE sessionId = :sessionId ORDER BY timestampMs DESC LIMIT 1")
+    suspend fun last(sessionId: Long): SampleEntity?
 
     @Query("DELETE FROM samples WHERE id IN (:ids)")
     suspend fun deleteByIds(ids: List<Long>)

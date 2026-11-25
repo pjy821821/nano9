@@ -20,6 +20,8 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import android.content.Intent
+import android.provider.Settings as SystemSettings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,10 +29,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kr.techbridge.battery.R
 import kr.techbridge.battery.core.Calibration
@@ -46,6 +50,13 @@ fun SettingsScreen(vm: SettingsViewModel) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val device by vm.device.collectAsStateWithLifecycle()
     val health by vm.health.collectAsStateWithLifecycle()
+    val batteryOptIgnored by vm.batteryOptimizationIgnored.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    // 시스템 설정에서 돌아오면 제외 여부를 다시 읽는다.
+    LifecycleResumeEffect(Unit) {
+        vm.refreshBatteryOptimization()
+        onPauseOrDispose { }
+    }
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
@@ -78,6 +89,25 @@ fun SettingsScreen(vm: SettingsViewModel) {
                 SwitchRow(stringResource(R.string.settings_ongoing), "전력·잔량·남은 시간을 알림에 표시", settings.ongoingNotification, vm::setOngoingNotification)
                 HorizontalDivider()
                 SwitchRow(stringResource(R.string.settings_monitoring), stringResource(R.string.settings_monitoring_desc), settings.monitoringEnabled, vm::setMonitoringEnabled)
+                if (settings.monitoringEnabled) {
+                    HorizontalDivider()
+                    Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.settings_battery_opt), style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                stringResource(if (batteryOptIgnored) R.string.settings_battery_opt_ok else R.string.settings_battery_opt_warn),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (batteryOptIgnored) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                            )
+                        }
+                        if (!batteryOptIgnored) {
+                            // 권한이 필요 없는 시스템 목록 화면. REQUEST_IGNORE_BATTERY_OPTIMIZATIONS 권한은 Play 정책상 선언하지 않는다.
+                            OutlinedButton(onClick = { context.startActivity(Intent(SystemSettings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }) {
+                                Text(stringResource(R.string.settings_open_system))
+                            }
+                        }
+                    }
+                }
             }
         }
 
