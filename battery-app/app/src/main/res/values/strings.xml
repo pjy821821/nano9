@@ -79,5 +79,9 @@
     <string name="session_peak_power">최대 전력</string>
     <string name="session_peak_temp">온도 최고</string>
     <string name="session_incomplete">기록이 중간에 끊긴 세션</string>
+    <string name="export_csv">CSV 내보내기</string>
+    <string name="export_done_sessions">세션 %1$d개를 CSV로 저장했습니다</string>
+    <string name="export_done_samples">샘플 %1$d개를 CSV로 저장했습니다</string>
+    <string name="export_failed">CSV를 저장하지 못했습니다</string>
     <string name="back">뒤로</string>
 </resources>

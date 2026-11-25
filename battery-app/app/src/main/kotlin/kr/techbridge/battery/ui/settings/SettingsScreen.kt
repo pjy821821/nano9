@@ -189,7 +189,7 @@ fun SettingsScreen(vm: SettingsViewModel) {
         Card(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 24.dp)) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("Pro · 한 번만 결제", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                Text("광고 없음은 기본. Pro는 무제한 기록 보관, CSV 내보내기, 위젯 테마. (결제 연동은 다음 단계)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("광고 없음은 기본. Pro는 무제한 기록 보관, 위젯 테마. (결제 연동은 다음 단계)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

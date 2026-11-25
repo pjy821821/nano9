@@ -1,5 +1,8 @@
 package kr.techbridge.battery.ui.sessions
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -28,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -39,6 +44,7 @@ import kr.techbridge.battery.ui.components.Series
 import kr.techbridge.battery.ui.components.Stat
 import kr.techbridge.battery.ui.theme.StateColors
 import kr.techbridge.battery.util.Format
+import java.time.LocalDate
 
 @Composable
 fun SessionDetailScreen(vm: SessionDetailViewModel, onBack: () -> Unit) {
@@ -51,6 +57,12 @@ fun SessionDetailScreen(vm: SessionDetailViewModel, onBack: () -> Unit) {
     var draft by remember(chargerName) { mutableStateOf(chargerName ?: "") }
 
     LaunchedEffect(deleted) { if (deleted) onBack() }
+
+    val context = LocalContext.current
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri != null) vm.exportSamples(uri)
+    }
+    LaunchedEffect(Unit) { vm.events.collect { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() } }
 
     val s = state.session ?: return
 
@@ -66,6 +78,9 @@ fun SessionDetailScreen(vm: SessionDetailViewModel, onBack: () -> Unit) {
                     "${Format.date(s.startMs)} ${Format.time(s.startMs)} ~ ${Format.time(s.endMs)} · ${Format.duration(s.endMs - s.startMs)}",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            IconButton(onClick = { exportLauncher.launch("battery-session-${s.id}-${LocalDate.now()}.csv") }) {
+                Icon(Icons.Filled.Download, contentDescription = stringResource(R.string.export_csv))
             }
         }
 
