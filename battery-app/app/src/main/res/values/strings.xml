@@ -14,6 +14,7 @@
     <string name="state_full">완충</string>
     <string name="state_low">배터리 부족</string>
     <string name="state_not_charging">충전 대기</string>
+    <string name="state_deficit">공급 부족 · 배터리 소모 중</string>
     <string name="time_to_full">완충까지 %1$s</string>
     <string name="power_hint">배터리에 실제 들어가는 전력 (전압 × 전류)</string>
     <string name="connected_charger">연결된 충전기</string>
@@ -27,6 +28,7 @@
     <string name="channel_alerts">배터리 알림</string>
     <string name="channel_alerts_desc">충전 한계 도달, 온도 경고</string>
     <string name="notif_charging_title">%1$s W로 충전 중 · %2$d%%</string>
+    <string name="notif_deficit_title">충전기 출력 부족 · %1$s W 소모 · %2$d%%</string>
     <string name="notif_discharging_title">배터리 %1$d%% · %2$s</string>
     <string name="notif_monitoring">배터리 모니터링 중</string>
     <string name="notif_limit_title">충전 %1$d%% 도달</string>

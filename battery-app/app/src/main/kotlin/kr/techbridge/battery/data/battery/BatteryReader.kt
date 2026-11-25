@@ -37,6 +37,9 @@ class BatteryReader(private val context: Context) {
         // getLongProperty는 지원하지 않으면 Long.MIN_VALUE를 돌려준다.
         val currentRaw = bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
             .takeIf { it != Long.MIN_VALUE } ?: 0L
+        // 충전 카운터(µAh)는 부호 보정의 근거다. 삼성은 약 3.6 mAh 눈금으로 갱신한다.
+        val chargeCounter = bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
+            .takeIf { it != Long.MIN_VALUE && it > 0L }
 
         return RawSample(
             timestampMs = nowMs,
@@ -46,6 +49,7 @@ class BatteryReader(private val context: Context) {
             temperatureDeciC = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0),
             plugged = plugged,
             charging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL,
+            chargeCounterUah = chargeCounter,
         )
     }
 

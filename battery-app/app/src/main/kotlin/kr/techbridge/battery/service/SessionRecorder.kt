@@ -153,6 +153,7 @@ class SessionRecorder(private val context: Context, private val c: AppContainer)
         const val UNPLUGGED_INTERVAL_MS = 30_000L
         const val SESSION_WRITE_INTERVAL_MS = 10_000L
         const val WIDGET_INTERVAL_MS = 30_000L
-        const val CALIBRATION_WINDOW = 60
+        // 꽂혀 있으면 1초 간격이므로 2분. 충전 카운터 눈금(삼성 약 3.6 mAh)이 약한 USB 충전에서도 움직일 시간이다.
+        const val CALIBRATION_WINDOW = 120
     }
 }
