@@ -101,6 +101,7 @@ fun HomeScreen(container: AppContainer, onOpenChart: () -> Unit, onOpenSettings:
             sample == null -> stringResource(R.string.unknown)
             charging && sample.levelPercent >= 100 -> stringResource(R.string.state_full)
             charging && !sample.charging -> stringResource(R.string.state_not_charging)
+            charging && sample.currentUa < 0 -> stringResource(R.string.state_deficit)
             charging -> stringResource(R.string.state_charging)
             low -> stringResource(R.string.state_low)
             else -> stringResource(R.string.state_discharging)

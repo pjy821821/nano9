@@ -66,6 +66,7 @@ private fun WidgetContent(context: Context, s: Sample?, remainingMs: Long?) {
     val accent = if (charging) ColorProvider(Color(0xFF146C32)) else GlanceTheme.colors.onSurface
     val stateText = when {
         s == null -> context.getString(R.string.unknown)
+        charging && s.currentUa < 0 -> context.getString(R.string.state_deficit)
         charging && remainingMs != null -> context.getString(R.string.state_charging) + " · " + context.getString(R.string.time_to_full, Format.duration(remainingMs))
         charging -> context.getString(R.string.state_charging)
         else -> context.getString(R.string.state_discharging)
@@ -85,7 +86,7 @@ private fun WidgetContent(context: Context, s: Sample?, remainingMs: Long?) {
             Spacer(GlanceModifier.width(10.dp))
             if (size.width >= BatteryWidget.LARGE.width && s != null) {
                 Text(
-                    text = "${Format.watts(s.powerMw)} W",
+                    text = "${Format.watts(kotlin.math.abs(s.powerMw))} W",
                     style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 28.sp, fontWeight = FontWeight.Bold),
                 )
             }

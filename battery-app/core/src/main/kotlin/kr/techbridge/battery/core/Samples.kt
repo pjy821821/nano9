@@ -13,6 +13,8 @@ data class RawSample(
     val temperatureDeciC: Int,
     val plugged: Boolean,
     val charging: Boolean,
+    /** BATTERY_PROPERTY_CHARGE_COUNTER(µAh). 지원하지 않는 기기는 null. 부호 보정의 물리적 근거로 쓴다. */
+    val chargeCounterUah: Long? = null,
 )
 
 /** 단위와 부호를 정규화한 샘플. currentUa는 µA, 충전이 +, 방전이 -. */

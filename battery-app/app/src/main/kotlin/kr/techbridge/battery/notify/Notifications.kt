@@ -75,7 +75,13 @@ object Notifications {
             parts += "${Format.milliamps(s.currentUa)} mA"
             parts += "${Format.celsius(s.temperatureDeciC)} °C"
             chargerName?.let { parts += it }
-            b.setContentTitle(context.getString(R.string.notif_charging_title, Format.watts(s.powerMw), s.levelPercent))
+            // PC USB처럼 공급이 소비보다 작으면 꽂혀 있어도 순전류가 음수다. "-1.6 W로 충전 중"이라 쓰지 않는다.
+            val title = if (s.currentUa < 0) {
+                context.getString(R.string.notif_deficit_title, Format.watts(-s.powerMw), s.levelPercent)
+            } else {
+                context.getString(R.string.notif_charging_title, Format.watts(s.powerMw), s.levelPercent)
+            }
+            b.setContentTitle(title)
                 .setContentText(parts.joinToString(" · "))
                 .setProgress(100, s.levelPercent, false)
                 .addAction(0, context.getString(R.string.action_open_chart), openApp(context, MainActivity.ROUTE_CHART))
