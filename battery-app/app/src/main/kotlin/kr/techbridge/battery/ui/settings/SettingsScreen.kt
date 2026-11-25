@@ -147,11 +147,13 @@ fun SettingsScreen(vm: SettingsViewModel) {
                     val labels = listOf(R.string.theme_system, R.string.theme_light, R.string.theme_dark, R.string.theme_amoled)
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                         modes.forEachIndexed { i, mode ->
+                            // 체크 아이콘을 넣으면 "AMOLED"가 두 줄로 꺾여 그 칸만 커진다. 선택은 배경색으로만 구분한다.
                             SegmentedButton(
                                 selected = settings.theme == mode,
                                 onClick = { vm.setTheme(mode) },
                                 shape = SegmentedButtonDefaults.itemShape(index = i, count = modes.size),
-                            ) { Text(stringResource(labels[i])) }
+                                icon = {},
+                            ) { Text(stringResource(labels[i]), maxLines = 1, softWrap = false) }
                         }
                     }
                 }
