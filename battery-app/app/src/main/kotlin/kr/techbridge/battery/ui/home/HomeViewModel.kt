@@ -44,8 +44,13 @@ class HomeViewModel(private val c: AppContainer) : ViewModel() {
 
     private val sample: Flow<Sample?> = combine(c.live.sample, fallback) { live, fb -> live ?: fb }
 
-    /** 30초마다, 그리고 꽂힘 상태가 바뀔 때 남은 시간(완충까지 또는 방전까지)을 다시 계산한다. */
-    private val remaining: Flow<Remaining?> = sample.map { it?.plugged }.distinctUntilChanged()
+    /**
+     * 남은 시간(완충까지 또는 방전까지). 꽂힘 상태가 바뀌면 바로, 꽂혀 있으면 30초마다,
+     * 뺀 상태에서는 새 샘플(30초 간격)이 올 때마다 다시 계산한다. 뺀 직후 타이머 탓에 최대 30초 늦게 뜨지 않게 하기 위함.
+     */
+    private val remaining: Flow<Remaining?> = sample
+        .map { s -> if (s == null) null else s.plugged to (if (s.plugged) 0L else s.timestampMs) }
+        .distinctUntilChanged()
         .flatMapLatest {
             flow {
                 while (true) {

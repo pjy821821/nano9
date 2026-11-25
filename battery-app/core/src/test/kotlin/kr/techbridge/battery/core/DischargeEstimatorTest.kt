@@ -35,8 +35,11 @@ class DischargeEstimatorTest {
     @Test
     fun `too few samples or too short span returns null`() {
         assertNull(DischargeEstimator.estimateRemainingMs(listOf(s(60_000, -300_000, counter = 1), s(0, -300_000, counter = 1)), 4000, now))
-        val short = (2 downTo 0).map { s(it * 30_000L, -300_000, counter = 3_000_000) } // 60초 간격
+        val short = (2 downTo 0).map { s(it * 20_000L, -300_000, counter = 3_000_000) } // 40초 범위
         assertNull(DischargeEstimator.estimateRemainingMs(short, 4000, now))
+        // 30초 간격 3개(60초 범위)면 충분하다: 3,000 mAh / 300 mA = 10시간
+        val enough = (2 downTo 0).map { s(it * 30_000L, -300_000, counter = 3_000_000) }
+        assertEquals(10 * 3_600_000L, DischargeEstimator.estimateRemainingMs(enough, null, now))
     }
 
     @Test

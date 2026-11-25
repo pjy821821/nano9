@@ -5,12 +5,14 @@ package kr.techbridge.battery.core
  *
  * - 최근 [WINDOW_MS] 안의 뺀 상태·방전 중(전류 음수) 샘플만 쓴다.
  * - 샘플이 [MIN_SAMPLES]개 미만이거나 처음과 끝 사이가 [MIN_SPAN_MS] 미만이면 근거가 부족해 null.
+ *   뺀 상태 샘플은 30초 간격이므로 뺀 뒤 약 1분이면 첫 값이 나온다(2026-11-25 실기기에서 2분 조건은 사용자가
+ *   값을 보기 전에 다시 꽂을 만큼 길었다).
  * - 남은 전하는 충전 카운터(µAh, 연료 게이지가 셈)가 있으면 그것, 없으면 설계 용량 × 잔량%.
  * - 남은 시간 = 남은 전하 / 평균 방전 전류. 화면이 꺼진 대기 소비와 켠 소비가 섞인 평균이므로 "약"으로 표시한다.
  */
 object DischargeEstimator {
     const val MIN_SAMPLES = 3
-    const val MIN_SPAN_MS = 2 * 60_000L
+    const val MIN_SPAN_MS = 60_000L
     const val WINDOW_MS = 30 * 60_000L
 
     fun estimateRemainingMs(samples: List<Sample>, designCapacityMah: Int?, nowMs: Long): Long? {

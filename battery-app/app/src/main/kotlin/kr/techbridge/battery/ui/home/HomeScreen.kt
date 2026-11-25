@@ -89,8 +89,10 @@ fun HomeScreen(vm: HomeViewModel, onOpenChart: () -> Unit, onOpenSettings: () ->
                 levelPercent = sample?.levelPercent ?: 0,
                 color = ringColor,
                 stateLabel = stateLabel,
-                subLabel = remaining?.let {
-                    stringResource(if (it.kind == RemainingKind.TO_FULL) R.string.time_to_full else R.string.time_to_empty, Format.duration(it.ms))
+                subLabel = when {
+                    remaining != null -> stringResource(if (remaining.kind == RemainingKind.TO_FULL) R.string.time_to_full else R.string.time_to_empty, Format.duration(remaining.ms))
+                    sample != null && !sample.plugged -> stringResource(R.string.time_to_empty_pending) // 뺀 뒤 약 1분이면 추정이 나온다
+                    else -> null
                 },
             )
         }
