@@ -31,6 +31,24 @@ SDK 없는 환경(CI, 헤드리스)에서는 `:core`만 빌드·테스트된다.
 
 Android Studio에서는 `battery-app/` 폴더를 열면 된다.
 
+로컬 환경 메모(회사 PC, 2026-11-24): Android Studio는 zip 배포판을 `%LOCALAPPDATA%\Programs\android-studio`에 풀어 설치했고
+(winget 무음 설치는 관리자 권한 단계에서 조용히 실패함), SDK는 `%LOCALAPPDATA%\Android\Sdk`에 명령줄 도구로
+platform-tools, platforms/android-36, build-tools/36.0.0만 설치했다. 시스템 JDK가 8이라 `~/.gradle/gradle.properties`에
+`org.gradle.java.home`을 Android Studio의 `jbr`(Java 25)로 지정해 두었다. 새 PC에서는 Android Studio 설치 후 `local.properties`의
+`sdk.dir`만 맞추면 된다.
+
+Gradle은 9.5.1을 쓴다. 8.14는 Java 25에서 돌지 않고, 9.6 이상은 AGP 8.x가 쓰는 내부 API를 제거해 AGP 8.13과 맞지 않는다
+(AGP 9.x로 올리면 9.6+ 가능). 프로젝트 경로에 한글이 있어 두 가지 우회가 필요하다.
+- `gradle.properties`의 `android.overridePathCheck=true`: AGP의 비ASCII 경로 검사 해제 (저장소에 포함).
+- `~/.gradle/gradle.properties`의 `org.gradle.jvmargs=-Xmx2g -Dfile.encoding=COMPAT`: 이 PC 전용. 없으면 Gradle이 테스트
+  워커 클래스패스를 UTF-8 argfile로 쓰고 Windows 런처가 CP949로 읽어 `ClassNotFoundException`이 난다. ASCII 경로로 옮기면 불필요.
+
+### CI (GitHub Actions)
+
+`.github/workflows/battery-app-build.yml`이 `battery-app/**` 변경을 푸시할 때마다 JDK 17 + 러너의 Android SDK로
+`:core:test`와 `:app:assembleDebug`를 돌린다. 실행 페이지의 Artifacts에서 `battery-app-debug-apk`(디버그 APK)와
+`battery-app-test-reports`(테스트 리포트, Room 스키마 JSON)를 내려받을 수 있다. 로컬에 SDK가 없어도 이 경로로 빌드 확인이 된다.
+
 ## 구조 (app)
 
 ```
@@ -63,7 +81,7 @@ kr.techbridge.battery
 ## 현재 상태와 다음 단계
 
 - [x] core 모듈: 구현 + 단위 테스트 22개 통과
-- [x] app 모듈: 전체 골격 작성. **아직 Android SDK 환경에서 컴파일하지 않았다.** 첫 빌드에서 import·API 시그니처 오류가 나올 수 있다.
+- [x] app 모듈: 전체 골격 작성. 2026-11-24 GitHub Actions에서 첫 컴파일 성공(`assembleDebug`, 경고 0), 같은 날 회사 PC 로컬(Gradle 9.5.1 + JBR 25)에서도 테스트·APK 빌드 성공. **실기기에서는 아직 실행하지 않았다.**
 - [ ] 실기기(삼성, 픽셀)에서 전류 단위·부호 확인, 보정표 1판
 - [ ] ViewModel 도입(현재 화면이 Repository/StateFlow를 직접 구독)
 - [ ] 서비스 사망 복구(WorkManager 충전 제약 작업), 배터리 최적화 제외 안내

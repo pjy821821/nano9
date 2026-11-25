@@ -5,7 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.ShowChart
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -45,7 +45,7 @@ private data class TopLevel(val route: String, val labelRes: Int, val icon: Imag
 
 private val topLevel = listOf(
     TopLevel(Routes.HOME, R.string.nav_home, Icons.Filled.Home),
-    TopLevel(Routes.CHART, R.string.nav_chart, Icons.Filled.ShowChart),
+    TopLevel(Routes.CHART, R.string.nav_chart, Icons.AutoMirrored.Filled.ShowChart),
     TopLevel(Routes.SESSIONS, R.string.nav_sessions, Icons.Filled.History),
     TopLevel(Routes.SETTINGS, R.string.nav_settings, Icons.Filled.Settings),
 )
