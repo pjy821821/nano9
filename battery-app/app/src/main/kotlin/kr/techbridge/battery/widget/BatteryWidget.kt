@@ -33,6 +33,9 @@ import kr.techbridge.battery.BatteryApp
 import kr.techbridge.battery.R
 import kr.techbridge.battery.core.Calibration
 import kr.techbridge.battery.core.Sample
+import kr.techbridge.battery.data.battery.Remaining
+import kr.techbridge.battery.data.battery.RemainingKind
+import kr.techbridge.battery.data.battery.RemainingTimes
 import kr.techbridge.battery.util.Format
 
 /** 홈 화면 위젯. 서비스가 살아 있으면 실시간 샘플을, 아니면 BatteryManager를 직접 읽는다. */
@@ -41,9 +44,10 @@ class BatteryWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val c = BatteryApp.container(context)
-        val calibration = c.settings.current().calibration ?: Calibration.SPEC
+        val settings = c.settings.current()
+        val calibration = settings.calibration ?: Calibration.SPEC
         val sample = c.live.sample.value ?: c.batteryReader.read()?.let(calibration::normalize)
-        val remaining = if (sample?.plugged == true) c.batteryReader.deviceInfo().chargeTimeRemainingMs else null
+        val remaining = RemainingTimes.compute(c.batteryReader, sample, c.live.recent.value, settings.designCapacityMah)
         provideContent {
             GlanceTheme { WidgetContent(context, sample, remaining) }
         }
@@ -60,15 +64,16 @@ class BatteryWidgetReceiver : GlanceAppWidgetReceiver() {
 }
 
 @Composable
-private fun WidgetContent(context: Context, s: Sample?, remainingMs: Long?) {
+private fun WidgetContent(context: Context, s: Sample?, remaining: Remaining?) {
     val size = LocalSize.current
     val charging = s?.plugged == true
     val accent = if (charging) ColorProvider(Color(0xFF146C32)) else GlanceTheme.colors.onSurface
     val stateText = when {
         s == null -> context.getString(R.string.unknown)
         charging && s.currentUa < 0 -> context.getString(R.string.state_deficit)
-        charging && remainingMs != null -> context.getString(R.string.state_charging) + " · " + context.getString(R.string.time_to_full, Format.duration(remainingMs))
+        charging && remaining?.kind == RemainingKind.TO_FULL -> context.getString(R.string.state_charging) + " · " + context.getString(R.string.time_to_full, Format.duration(remaining.ms))
         charging -> context.getString(R.string.state_charging)
+        remaining?.kind == RemainingKind.TO_EMPTY -> context.getString(R.string.state_discharging) + " · " + context.getString(R.string.time_to_empty, Format.duration(remaining.ms))
         else -> context.getString(R.string.state_discharging)
     }
 

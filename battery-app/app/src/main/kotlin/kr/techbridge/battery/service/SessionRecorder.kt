@@ -16,6 +16,8 @@ import kr.techbridge.battery.core.ChargerMatcher
 import kr.techbridge.battery.core.CurrentCalibrator
 import kr.techbridge.battery.core.RawSample
 import kr.techbridge.battery.core.SessionTracker
+import kr.techbridge.battery.data.battery.Remaining
+import kr.techbridge.battery.data.battery.RemainingTimes
 import kr.techbridge.battery.data.settings.Settings
 import kr.techbridge.battery.di.AppContainer
 import kr.techbridge.battery.notify.Notifications
@@ -41,13 +43,17 @@ class SessionRecorder(private val context: Context, private val c: AppContainer)
     /** 세션 초반 전력(mW). 협상값으로 못 맞힌 충전기를 전력으로 다시 맞히는 데 쓴다. */
     private val powerWindow = ArrayList<Double>(POWER_MATCH_SAMPLES)
     private var powerMatchDone = false
+    /** 마지막으로 뺀 시각. 뺀 직후 [UNPLUGGED_BURST_MS] 동안은 빠르게 샘플링한다. */
+    private var unpluggedSinceMs = 0L
+    private var lastPlugged: Boolean? = null
 
     /** 꽂힘·뺌 이벤트로 루프를 깨우는 신호. 합쳐지므로 여러 번 와도 한 번만 깨운다. */
     private val kicks = Channel<Unit>(Channel.CONFLATED)
 
     // 매초 알림을 갱신할 때 무거운 조회(완충 예상 시간은 binder 호출, 충전기 이름은 DB 두 번)는 캐시한다.
-    private var remainingMs: Long? = null
+    private var remaining: Remaining? = null
     private var remainingCheckedMs = 0L
+    private var remainingPlugged: Boolean? = null
     private var chargerNameCache: String? = null
     private var chargerNameSessionId: Long? = null
     private var chargerNameCheckedMs = 0L
@@ -73,12 +79,25 @@ class SessionRecorder(private val context: Context, private val c: AppContainer)
         var nextDueMs = System.currentTimeMillis()
         while (currentCoroutineContext().isActive) {
             val plugged = sampleNow()
-            nextDueMs += if (plugged) PLUGGED_INTERVAL_MS else UNPLUGGED_INTERVAL_MS
+            nextDueMs += if (plugged) PLUGGED_INTERVAL_MS else unpluggedIntervalMs()
             val now = System.currentTimeMillis()
             if (nextDueMs < now) nextDueMs = now // 처리가 간격보다 오래 걸렸으면 밀린 틱을 몰아서 돌리지 않는다
             // 꽂힘·뺌 이벤트가 오면 남은 시간을 기다리지 않고 바로 샘플링한다. 뺀 상태의 30초 간격 중에 꽂히면
             // 예전에는 리시버의 샘플 하나 뒤 최대 30초 동안 세션 샘플이 비었다.
             if (withTimeoutOrNull(nextDueMs - now) { kicks.receive() } != null) nextDueMs = System.currentTimeMillis()
+        }
+    }
+
+    /**
+     * 뺀 상태의 샘플 간격. 뺀 직후 2분은 5초(방전 남은 시간이 약 30초 만에 나오게), 앱 화면을 보고 있으면 10초,
+     * 아니면 30초(배터리 절약). 꽂혀 있을 때는 항상 1초.
+     */
+    private fun unpluggedIntervalMs(): Long {
+        val now = System.currentTimeMillis()
+        return when {
+            now - unpluggedSinceMs < UNPLUGGED_BURST_MS -> UNPLUGGED_BURST_INTERVAL_MS
+            c.live.uiWatching -> UNPLUGGED_WATCHING_INTERVAL_MS
+            else -> UNPLUGGED_INTERVAL_MS
         }
     }
 
@@ -115,6 +134,8 @@ class SessionRecorder(private val context: Context, private val c: AppContainer)
     /** 한 번 샘플링하고 처리한다. 꽂혀 있으면 true. */
     suspend fun sampleNow(): Boolean = mutex.withLock {
         val raw = c.batteryReader.read() ?: return false
+        if (lastPlugged == true && !raw.plugged) unpluggedSinceMs = raw.timestampMs
+        lastPlugged = raw.plugged
         maybeCalibrate(raw)
         val sample = calibration.normalize(raw)
         val repo = c.repository
@@ -189,15 +210,11 @@ class SessionRecorder(private val context: Context, private val c: AppContainer)
             return
         }
         val now = sample.timestampMs
-        val remaining = if (!sample.plugged) {
-            remainingCheckedMs = 0L // 다음에 꽂히면 바로 다시 묻는다
-            null
-        } else {
-            if (now - remainingCheckedMs >= REMAINING_REFRESH_MS) {
-                remainingMs = c.batteryReader.deviceInfo().chargeTimeRemainingMs
-                remainingCheckedMs = now
-            }
-            remainingMs
+        // 완충까지(꽂힘)·방전까지(뺌) 남은 시간. 꽂힘 상태가 바뀌면 바로, 아니면 30초마다 다시 계산한다.
+        if (remainingPlugged != sample.plugged || now - remainingCheckedMs >= REMAINING_REFRESH_MS) {
+            remaining = RemainingTimes.compute(c.batteryReader, sample, c.live.recent.value, settings.designCapacityMah)
+            remainingCheckedMs = now
+            remainingPlugged = sample.plugged
         }
         val chargerName = sessionId?.let { id ->
             if (id != chargerNameSessionId || now - chargerNameCheckedMs >= CHARGER_NAME_REFRESH_MS) {
@@ -236,6 +253,9 @@ class SessionRecorder(private val context: Context, private val c: AppContainer)
     companion object {
         const val PLUGGED_INTERVAL_MS = 1_000L
         const val UNPLUGGED_INTERVAL_MS = 30_000L
+        const val UNPLUGGED_WATCHING_INTERVAL_MS = 10_000L
+        const val UNPLUGGED_BURST_INTERVAL_MS = 5_000L
+        const val UNPLUGGED_BURST_MS = 2 * 60_000L
         const val SESSION_WRITE_INTERVAL_MS = 10_000L
         const val WIDGET_INTERVAL_MS = 30_000L
         // 꽂혀 있으면 1초 간격이므로 2분. 충전 카운터 눈금(삼성 약 3.6 mAh)이 약한 USB 충전에서도 움직일 시간이다.

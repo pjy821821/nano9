@@ -19,6 +19,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kr.techbridge.battery.core.ChargingSession
 import kr.techbridge.battery.core.Sample
+import kr.techbridge.battery.data.battery.Remaining
+import kr.techbridge.battery.data.battery.RemainingTimes
 import kr.techbridge.battery.di.AppContainer
 
 /** 홈 화면. 서비스가 올리는 실시간 상태를 화면용 상태로 묶는다. */
@@ -30,8 +32,8 @@ class HomeViewModel(private val c: AppContainer) : ViewModel() {
         val session: ChargingSession? = null,
         val sessionId: Long? = null,
         val recent: List<Sample> = emptyList(),
-        /** OS가 예상한 완충까지 남은 시간. 꽂혀 있지 않거나 모르면 null. */
-        val remainingMs: Long? = null,
+        /** 완충까지(꽂힘) 또는 방전까지(뺌) 남은 시간. 모르면 null. */
+        val remaining: Remaining? = null,
         val chargerName: String? = null,
     )
 
@@ -42,13 +44,22 @@ class HomeViewModel(private val c: AppContainer) : ViewModel() {
 
     private val sample: Flow<Sample?> = combine(c.live.sample, fallback) { live, fb -> live ?: fb }
 
-    /** 꽂혀 있는 동안 30초마다 OS의 완충 예상 시간을 다시 묻는다. */
-    private val remaining: Flow<Long?> = sample.map { it?.plugged == true }.distinctUntilChanged()
-        .flatMapLatest { plugged ->
-            if (!plugged) flowOf(null)
-            else flow {
+    /**
+     * 남은 시간(완충까지 또는 방전까지). 꽂힘 상태가 바뀌면 바로, 꽂혀 있으면 30초마다,
+     * 뺀 상태에서는 새 샘플(30초 간격)이 올 때마다 다시 계산한다. 뺀 직후 타이머 탓에 최대 30초 늦게 뜨지 않게 하기 위함.
+     */
+    private val remaining: Flow<Remaining?> = sample
+        .map { s -> if (s == null) null else s.plugged to (if (s.plugged) 0L else s.timestampMs) }
+        .distinctUntilChanged()
+        .flatMapLatest {
+            flow {
                 while (true) {
-                    emit(withContext(Dispatchers.IO) { c.batteryReader.deviceInfo().chargeTimeRemainingMs })
+                    emit(
+                        withContext(Dispatchers.IO) {
+                            val current = c.live.sample.value ?: c.batteryReader.read()?.let(c.live.calibration.value::normalize)
+                            RemainingTimes.compute(c.batteryReader, current, c.live.recent.value, c.settings.current().designCapacityMah)
+                        },
+                    )
                     delay(REMAINING_REFRESH_MS)
                 }
             }
@@ -65,8 +76,8 @@ class HomeViewModel(private val c: AppContainer) : ViewModel() {
     val uiState: StateFlow<UiState> = combine(
         sample, c.live.session, c.live.sessionId, c.live.recent,
         combine(remaining, chargerName) { r, n -> r to n },
-    ) { s, session, id, recent, (remainingMs, name) ->
-        UiState(sample = s, session = session, sessionId = id, recent = recent, remainingMs = remainingMs, chargerName = name)
+    ) { s, session, id, recent, (remaining, name) ->
+        UiState(sample = s, session = session, sessionId = id, recent = recent, remaining = remaining, chargerName = name)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
 
     /** 진행 중 세션의 충전기에 이름을 붙인다(없으면 새로 만든다). 세션이 없으면 무시. */

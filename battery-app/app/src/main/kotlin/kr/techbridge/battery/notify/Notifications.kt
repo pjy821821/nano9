@@ -14,6 +14,8 @@ import androidx.core.content.ContextCompat
 import kr.techbridge.battery.R
 import kr.techbridge.battery.core.ChargingSession
 import kr.techbridge.battery.core.Sample
+import kr.techbridge.battery.data.battery.Remaining
+import kr.techbridge.battery.data.battery.RemainingKind
 import kr.techbridge.battery.service.MonitorService
 import kr.techbridge.battery.ui.MainActivity
 import kr.techbridge.battery.util.Format
@@ -62,7 +64,7 @@ object Notifications {
             .setContentIntent(openApp(context, null))
             .build()
 
-    fun ongoing(context: Context, s: Sample, session: ChargingSession?, timeRemainingMs: Long?, chargerName: String?): Notification {
+    fun ongoing(context: Context, s: Sample, session: ChargingSession?, remaining: Remaining?, chargerName: String?): Notification {
         val b = NotificationCompat.Builder(context, CHANNEL_MONITOR)
             .setSmallIcon(R.drawable.ic_stat_bolt)
             .setOngoing(true)
@@ -73,7 +75,7 @@ object Notifications {
 
         if (s.plugged) {
             val parts = ArrayList<String>(4)
-            timeRemainingMs?.let { parts += context.getString(R.string.time_to_full, Format.duration(it)) }
+            remaining?.takeIf { it.kind == RemainingKind.TO_FULL }?.let { parts += context.getString(R.string.time_to_full, Format.duration(it.ms)) }
             parts += "${Format.milliamps(s.currentUa)} mA"
             parts += "${Format.celsius(s.temperatureDeciC)} °C"
             chargerName?.let { parts += it }
@@ -91,8 +93,12 @@ object Notifications {
                 b.setSubText("${Format.time(it.startMs)} ~ · ${Format.mah(it.chargedMicroAmpHours)} mAh")
             }
         } else {
+            val parts = ArrayList<String>(3)
+            remaining?.takeIf { it.kind == RemainingKind.TO_EMPTY }?.let { parts += context.getString(R.string.time_to_empty, Format.duration(it.ms)) }
+            parts += "${Format.milliamps(s.currentUa)} mA"
+            parts += "${Format.celsius(s.temperatureDeciC)} °C"
             b.setContentTitle(context.getString(R.string.notif_discharging_title, s.levelPercent, context.getString(R.string.state_discharging)))
-                .setContentText("${Format.milliamps(s.currentUa)} mA · ${Format.celsius(s.temperatureDeciC)} °C")
+                .setContentText(parts.joinToString(" · "))
         }
         return b.build()
     }

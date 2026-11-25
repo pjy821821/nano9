@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kr.techbridge.battery.R
+import kr.techbridge.battery.data.battery.RemainingKind
 import kr.techbridge.battery.ui.components.BatteryRing
 import kr.techbridge.battery.ui.components.Card
 import kr.techbridge.battery.ui.components.LineChart
@@ -53,7 +54,7 @@ fun HomeScreen(vm: HomeViewModel, onOpenChart: () -> Unit, onOpenSettings: () ->
     val session = state.session
     val sessionId = state.sessionId
     val recent = state.recent
-    val remaining = state.remainingMs
+    val remaining = state.remaining
     val chargerName = state.chargerName
 
     Column(
@@ -88,7 +89,11 @@ fun HomeScreen(vm: HomeViewModel, onOpenChart: () -> Unit, onOpenSettings: () ->
                 levelPercent = sample?.levelPercent ?: 0,
                 color = ringColor,
                 stateLabel = stateLabel,
-                subLabel = remaining?.let { stringResource(R.string.time_to_full, Format.duration(it)) },
+                subLabel = when {
+                    remaining != null -> stringResource(if (remaining.kind == RemainingKind.TO_FULL) R.string.time_to_full else R.string.time_to_empty, Format.duration(remaining.ms))
+                    sample != null && !sample.plugged -> stringResource(R.string.time_to_empty_pending) // 뺀 뒤 약 1분이면 추정이 나온다
+                    else -> null
+                },
             )
         }
 
