@@ -33,6 +33,8 @@ data class Sample(
     val temperatureDeciC: Int,
     val plugged: Boolean,
     val charging: Boolean,
+    /** 연료 게이지의 남은 전하(µAh). 방전 남은 시간 추정에 쓴다. 없는 기기는 null. */
+    val chargeCounterUah: Long? = null,
 ) {
     /** 배터리 측 전력(mW). mV × µA = nW, 1e6으로 나누면 mW. */
     val powerMw: Double get() = voltageMv.toDouble() * currentUa.toDouble() / 1_000_000.0
@@ -56,6 +58,7 @@ data class Calibration(
         temperatureDeciC = raw.temperatureDeciC,
         plugged = raw.plugged,
         charging = raw.charging,
+        chargeCounterUah = raw.chargeCounterUah,
     )
 
     fun normalizeCurrent(raw: Long): Long {

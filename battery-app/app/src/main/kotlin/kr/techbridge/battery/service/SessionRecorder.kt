@@ -16,6 +16,8 @@ import kr.techbridge.battery.core.ChargerMatcher
 import kr.techbridge.battery.core.CurrentCalibrator
 import kr.techbridge.battery.core.RawSample
 import kr.techbridge.battery.core.SessionTracker
+import kr.techbridge.battery.data.battery.Remaining
+import kr.techbridge.battery.data.battery.RemainingTimes
 import kr.techbridge.battery.data.settings.Settings
 import kr.techbridge.battery.di.AppContainer
 import kr.techbridge.battery.notify.Notifications
@@ -46,8 +48,9 @@ class SessionRecorder(private val context: Context, private val c: AppContainer)
     private val kicks = Channel<Unit>(Channel.CONFLATED)
 
     // 매초 알림을 갱신할 때 무거운 조회(완충 예상 시간은 binder 호출, 충전기 이름은 DB 두 번)는 캐시한다.
-    private var remainingMs: Long? = null
+    private var remaining: Remaining? = null
     private var remainingCheckedMs = 0L
+    private var remainingPlugged: Boolean? = null
     private var chargerNameCache: String? = null
     private var chargerNameSessionId: Long? = null
     private var chargerNameCheckedMs = 0L
@@ -189,15 +192,11 @@ class SessionRecorder(private val context: Context, private val c: AppContainer)
             return
         }
         val now = sample.timestampMs
-        val remaining = if (!sample.plugged) {
-            remainingCheckedMs = 0L // 다음에 꽂히면 바로 다시 묻는다
-            null
-        } else {
-            if (now - remainingCheckedMs >= REMAINING_REFRESH_MS) {
-                remainingMs = c.batteryReader.deviceInfo().chargeTimeRemainingMs
-                remainingCheckedMs = now
-            }
-            remainingMs
+        // 완충까지(꽂힘)·방전까지(뺌) 남은 시간. 꽂힘 상태가 바뀌면 바로, 아니면 30초마다 다시 계산한다.
+        if (remainingPlugged != sample.plugged || now - remainingCheckedMs >= REMAINING_REFRESH_MS) {
+            remaining = RemainingTimes.compute(c.batteryReader, sample, c.live.recent.value, settings.designCapacityMah)
+            remainingCheckedMs = now
+            remainingPlugged = sample.plugged
         }
         val chargerName = sessionId?.let { id ->
             if (id != chargerNameSessionId || now - chargerNameCheckedMs >= CHARGER_NAME_REFRESH_MS) {

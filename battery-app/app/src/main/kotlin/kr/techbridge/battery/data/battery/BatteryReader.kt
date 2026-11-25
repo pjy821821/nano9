@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
+import android.os.PowerManager
 import kr.techbridge.battery.core.RawSample
 
 /** OS가 일반 앱에 주는 기기 배터리 정보. 사이클 수는 Android 14 이상에서 제조사가 채워줄 때만 유효하다. */
@@ -13,6 +14,8 @@ data class DeviceBatteryInfo(
     val technology: String?,
     val chargeCounterUah: Long?,
     val chargeTimeRemainingMs: Long?,
+    /** OS의 방전 예측(설정 → 배터리에 나오는 값). 꽂혀 있거나 예측이 없으면 null. Android 12+. */
+    val dischargePredictionMs: Long?,
 )
 
 enum class HealthLabel { GOOD, OVERHEAT, DEAD, OVER_VOLTAGE, FAILURE, COLD, UNKNOWN }
@@ -20,6 +23,7 @@ enum class HealthLabel { GOOD, OVERHEAT, DEAD, OVER_VOLTAGE, FAILURE, COLD, UNKN
 /** BatteryManager를 [RawSample]로 바꾼다. 단위·부호 보정은 하지 않는다(core의 Calibration이 담당). */
 class BatteryReader(private val context: Context) {
     private val bm: BatteryManager = context.getSystemService(BatteryManager::class.java)
+    private val pm: PowerManager = context.getSystemService(PowerManager::class.java)
 
     /** ACTION_BATTERY_CHANGED 스티키 인텐트를 읽어 샘플을 만든다. 배터리 정보가 없으면 null. */
     fun read(nowMs: Long = System.currentTimeMillis()): RawSample? {
@@ -79,12 +83,14 @@ class BatteryReader(private val context: Context) {
         }
         val remaining = bm.computeChargeTimeRemaining().takeIf { it >= 0 }
         val chargeCounter = bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER).takeIf { it != Long.MIN_VALUE }
+        val discharge = runCatching { pm.batteryDischargePrediction?.toMillis()?.takeIf { it > 0 } }.getOrNull()
         return DeviceBatteryInfo(
             cycleCount = cycles,
             healthLabel = health,
             technology = intent?.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY),
             chargeCounterUah = chargeCounter,
             chargeTimeRemainingMs = remaining,
+            dischargePredictionMs = discharge,
         )
     }
 }
