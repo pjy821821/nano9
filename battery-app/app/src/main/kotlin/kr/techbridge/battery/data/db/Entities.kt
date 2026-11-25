@@ -4,16 +4,28 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import kr.techbridge.battery.core.ChargerFingerprint
 import kr.techbridge.battery.core.ChargingSession
+import kr.techbridge.battery.core.KnownCharger
 import kr.techbridge.battery.core.Sample
 
-/** 사용자가 이름 붙인 충전기. 2차에서 BLE 식별자가 추가된다. */
+/**
+ * 사용자가 이름 붙인 충전기. 이름 붙일 당시 세션의 지문(연결 종류, 협상 전류·전압)과 평균 전력을 학습해
+ * 다음에 같은 충전기가 꽂히면 이름을 자동으로 붙인다. 2차에서 BLE 식별자가 추가된다.
+ */
 @Entity(tableName = "chargers")
 data class ChargerEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val createdMs: Long,
-)
+    val plugType: Int? = null,
+    val maxCurrentUa: Long? = null,
+    val maxVoltageUv: Long? = null,
+    val typicalPowerMw: Double? = null,
+) {
+    val fingerprint: ChargerFingerprint? get() = plugType?.let { ChargerFingerprint(it, maxCurrentUa, maxVoltageUv) }
+    fun toKnown() = KnownCharger(id, fingerprint, typicalPowerMw)
+}
 
 @Entity(
     tableName = "sessions",
@@ -37,18 +49,28 @@ data class SessionEntity(
     val completed: Boolean,
     val chargerId: Long? = null,
     val note: String? = null,
+    /** 세션 시작 때의 충전기 지문. 나중에 이 세션에 이름을 붙이면 충전기가 이 값을 학습한다. */
+    val plugType: Int? = null,
+    val maxCurrentUa: Long? = null,
+    val maxVoltageUv: Long? = null,
 ) {
     fun toCore() = ChargingSession(
         startMs, endMs, startLevel, endLevel, chargedMicroAmpHours, avgPowerMw, peakPowerMw,
         peakTemperatureDeciC, sampleCount, completed,
     )
 
+    val fingerprint: ChargerFingerprint? get() = plugType?.let { ChargerFingerprint(it, maxCurrentUa, maxVoltageUv) }
+
     companion object {
-        fun from(s: ChargingSession, id: Long = 0, chargerId: Long? = null, note: String? = null) = SessionEntity(
+        fun from(
+            s: ChargingSession, id: Long = 0, chargerId: Long? = null, note: String? = null,
+            fingerprint: ChargerFingerprint? = null,
+        ) = SessionEntity(
             id = id, startMs = s.startMs, endMs = s.endMs, startLevel = s.startLevel, endLevel = s.endLevel,
             chargedMicroAmpHours = s.chargedMicroAmpHours, avgPowerMw = s.avgPowerMw, peakPowerMw = s.peakPowerMw,
             peakTemperatureDeciC = s.peakTemperatureDeciC, sampleCount = s.sampleCount, completed = s.completed,
             chargerId = chargerId, note = note,
+            plugType = fingerprint?.plugType, maxCurrentUa = fingerprint?.maxCurrentUa, maxVoltageUv = fingerprint?.maxVoltageUv,
         )
     }
 }

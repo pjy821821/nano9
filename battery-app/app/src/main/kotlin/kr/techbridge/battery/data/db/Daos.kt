@@ -69,6 +69,9 @@ interface ChargerDao {
     @Query("SELECT * FROM chargers ORDER BY name")
     fun observeAll(): Flow<List<ChargerEntity>>
 
+    @Query("SELECT * FROM chargers")
+    suspend fun all(): List<ChargerEntity>
+
     @Query("SELECT * FROM chargers WHERE id = :id")
     suspend fun get(id: Long): ChargerEntity?
 

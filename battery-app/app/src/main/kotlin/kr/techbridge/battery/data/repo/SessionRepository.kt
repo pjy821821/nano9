@@ -1,7 +1,9 @@
 package kr.techbridge.battery.data.repo
 
 import kotlinx.coroutines.flow.Flow
+import kr.techbridge.battery.core.ChargerFingerprint
 import kr.techbridge.battery.core.ChargingSession
+import kr.techbridge.battery.core.KnownCharger
 import kr.techbridge.battery.core.Sample
 import kr.techbridge.battery.core.SampleThinning
 import kr.techbridge.battery.data.db.ChargerDao
@@ -22,13 +24,24 @@ class SessionRepository(
     fun observeSamples(sessionId: Long): Flow<List<SampleEntity>> = samples.observeForSession(sessionId)
     fun observeChargers(): Flow<List<ChargerEntity>> = chargers.observeAll()
 
-    suspend fun startSession(session: ChargingSession, chargerId: Long? = null): Long =
-        sessions.insert(SessionEntity.from(session, chargerId = chargerId))
+    suspend fun startSession(session: ChargingSession, chargerId: Long? = null, fingerprint: ChargerFingerprint? = null): Long =
+        sessions.insert(SessionEntity.from(session, chargerId = chargerId, fingerprint = fingerprint))
 
     suspend fun updateSession(id: Long, session: ChargingSession) {
         val existing = sessions.get(id) ?: return
-        sessions.update(SessionEntity.from(session, id = id, chargerId = existing.chargerId, note = existing.note))
+        sessions.update(SessionEntity.from(session, id = id, chargerId = existing.chargerId, note = existing.note, fingerprint = existing.fingerprint))
     }
+
+    /** 세션에 아직 충전기가 없으면 자동 인식 결과를 붙인다. 사용자가 그사이 이름을 붙였으면 건드리지 않는다. */
+    suspend fun assignChargerIfUnset(sessionId: Long, chargerId: Long): Boolean {
+        val s = sessions.get(sessionId) ?: return false
+        if (s.chargerId != null) return false
+        sessions.setCharger(sessionId, chargerId)
+        return true
+    }
+
+    /** 이름 붙인 충전기 전체(자동 인식 후보). */
+    suspend fun knownChargers(): List<KnownCharger> = chargers.all().map { it.toKnown() }
 
     suspend fun addSample(sessionId: Long, sample: Sample) {
         samples.insert(SampleEntity.from(sessionId, sample))
@@ -87,11 +100,28 @@ class SessionRepository(
         if (trimmed.isEmpty()) return null
         val session = sessions.get(sessionId) ?: return null
         val existing = session.chargerId
-        return if (existing != null) {
+        val id = if (existing != null) {
             renameCharger(existing, trimmed)
             existing
         } else {
             createCharger(trimmed).also { sessions.setCharger(sessionId, it) }
         }
+        learnFingerprint(id, session)
+        return id
+    }
+
+    /** 충전기가 이 세션의 지문과 평균 전력을 기억하게 한다. 다음에 같은 충전기가 꽂히면 이름을 자동으로 붙이는 근거. */
+    private suspend fun learnFingerprint(chargerId: Long, session: SessionEntity) {
+        val c = chargers.get(chargerId) ?: return
+        val fp = session.fingerprint
+        val power = session.avgPowerMw.takeIf { it > 0.0 } ?: c.typicalPowerMw
+        chargers.update(
+            c.copy(
+                plugType = fp?.plugType ?: c.plugType,
+                maxCurrentUa = fp?.maxCurrentUa ?: c.maxCurrentUa,
+                maxVoltageUv = fp?.maxVoltageUv ?: c.maxVoltageUv,
+                typicalPowerMw = power,
+            ),
+        )
     }
 }

@@ -15,7 +15,14 @@ data class RawSample(
     val charging: Boolean,
     /** BATTERY_PROPERTY_CHARGE_COUNTER(µAh). 지원하지 않는 기기는 null. 부호 보정의 물리적 근거로 쓴다. */
     val chargeCounterUah: Long? = null,
-)
+    /** EXTRA_PLUGGED 값(1 AC, 2 USB, 4 무선, 8 독). 0이면 안 꽂힘. */
+    val plugType: Int = 0,
+    /** 협상된 최대 충전 전류(µA)·전압(µV). 기기가 주지 않으면 null. 충전기 지문에 쓴다. */
+    val maxChargingCurrentUa: Long? = null,
+    val maxChargingVoltageUv: Long? = null,
+) {
+    val fingerprint: ChargerFingerprint get() = ChargerFingerprint(plugType, maxChargingCurrentUa, maxChargingVoltageUv)
+}
 
 /** 단위와 부호를 정규화한 샘플. currentUa는 µA, 충전이 +, 방전이 -. */
 data class Sample(

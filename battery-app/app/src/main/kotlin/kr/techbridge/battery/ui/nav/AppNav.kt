@@ -59,9 +59,21 @@ fun AppNav(viewModelFactory: ViewModelProvider.Factory, requestedRoute: String?,
     val currentRoute = backStack?.destination?.route
     val showBar = topLevel.any { it.route == currentRoute }
 
+    // 탭, 홈의 톱니바퀴·그래프 카드, 알림 라우트 모두 같은 "탭 전환" 규칙으로 다룬다. 시작 목적지 위에 그냥
+    // 쌓으면(launchSingleTop만) 백스택과 saveState/restoreState가 꼬여 탭을 눌러도 화면이 안 바뀌는 경우가 생긴다.
+    val navigateTopLevel: (String) -> Unit = { route ->
+        if (currentRoute != route) {
+            nav.navigate(route) {
+                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+    }
+
     LaunchedEffect(requestedRoute) {
         if (requestedRoute != null) {
-            nav.navigate(requestedRoute) { launchSingleTop = true }
+            navigateTopLevel(requestedRoute)
             onRouteConsumed()
         }
     }
@@ -73,13 +85,7 @@ fun AppNav(viewModelFactory: ViewModelProvider.Factory, requestedRoute: String?,
                     topLevel.forEach { item ->
                         NavigationBarItem(
                             selected = currentRoute == item.route,
-                            onClick = {
-                                nav.navigate(item.route) {
-                                    popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
+                            onClick = { navigateTopLevel(item.route) },
                             icon = { Icon(item.icon, contentDescription = null) },
                             label = { Text(stringResource(item.labelRes)) },
                         )
@@ -93,8 +99,8 @@ fun AppNav(viewModelFactory: ViewModelProvider.Factory, requestedRoute: String?,
             composable(Routes.HOME) {
                 HomeScreen(
                     vm = viewModel(factory = viewModelFactory),
-                    onOpenChart = { nav.navigate(Routes.CHART) { launchSingleTop = true } },
-                    onOpenSettings = { nav.navigate(Routes.SETTINGS) { launchSingleTop = true } },
+                    onOpenChart = { navigateTopLevel(Routes.CHART) },
+                    onOpenSettings = { navigateTopLevel(Routes.SETTINGS) },
                 )
             }
             composable(Routes.CHART) { ChartScreen(vm = viewModel(factory = viewModelFactory)) }
