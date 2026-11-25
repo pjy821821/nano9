@@ -32,25 +32,20 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kr.techbridge.battery.R
 import kr.techbridge.battery.data.db.ChargerEntity
 import kr.techbridge.battery.data.db.SessionEntity
-import kr.techbridge.battery.di.AppContainer
 import kr.techbridge.battery.ui.components.Card
 import kr.techbridge.battery.ui.components.SectionLabel
 import kr.techbridge.battery.ui.theme.StateColors
 import kr.techbridge.battery.util.Format
-import java.time.DayOfWeek
 import java.time.LocalDate
-import java.time.ZoneId
 
 @Composable
-fun SessionsScreen(container: AppContainer, onOpenSession: (Long) -> Unit) {
-    val sessions by container.repository.observeSessions().collectAsStateWithLifecycle(initialValue = emptyList())
-    val chargers by container.repository.observeChargers().collectAsStateWithLifecycle(initialValue = emptyList())
-    val chargerNames = chargers.associate { it.id to it.name }
-
-    val weekStart = LocalDate.now().with(DayOfWeek.MONDAY).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-    val thisWeek = sessions.filter { it.startMs >= weekStart }
-    val today = LocalDate.now()
-    val grouped = sessions.groupBy { Format.localDate(it.startMs) }
+fun SessionsScreen(vm: SessionsViewModel, onOpenSession: (Long) -> Unit) {
+    val state by vm.uiState.collectAsStateWithLifecycle()
+    val sessions = state.sessions
+    val chargerNames = state.chargerNames
+    val thisWeek = state.thisWeek
+    val today = state.today
+    val grouped = state.byDate
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),

@@ -64,10 +64,13 @@ kr.techbridge.battery
 ├── service/BootReceiver     부팅 후 서비스 재시작
 ├── notify/Notifications     상시 알림, 충전 한계·온도 경고
 ├── widget/BatteryWidget     Glance 위젯 (2×2, 4×2)
-└── ui/                      MainActivity, 테마, 내비게이션, 5개 화면, 공용 컴포넌트(BatteryRing, LineChart)
+├── ui/vm/AppViewModelFactory  모든 ViewModel을 AppContainer로 만드는 viewModelFactory
+└── ui/                      MainActivity(+MainViewModel: 테마), 내비게이션, 화면 5개(각각 Screen + ViewModel), 공용 컴포넌트(BatteryRing, LineChart)
 ```
 
-데이터 흐름: `BatteryReader.read()` → `Calibration.normalize()` → `SessionTracker.onSample()` → `SessionRepository` + `LiveBatteryState` → Compose 화면 / 위젯 / 알림.
+데이터 흐름: `BatteryReader.read()` → `Calibration.normalize()` → `SessionTracker.onSample()` → `SessionRepository` + `LiveBatteryState` → ViewModel(`StateFlow<UiState>`) → Compose 화면 / 위젯 / 알림.
+
+화면 계층 규칙: Composable은 `vm.uiState`만 구독하고 사용자 동작은 `vm.xxx()`로 넘긴다. Repository·DataStore·BatteryReader에 직접 닿지 않는다. ViewModel은 `AppNav`의 각 목적지에서 `viewModel(factory = …)`로 만들어 그 백스택 항목에 묶이고, 세션 상세의 id는 `SavedStateHandle`에서 읽는다. 서비스 시작·중지 같은 부수 효과는 ViewModel이 `AppContainer.appContext`로 처리한다.
 
 ## 설계 메모
 
@@ -93,7 +96,7 @@ kr.techbridge.battery
 - [x] app 모듈: 전체 골격 작성. 2026-11-24 GitHub Actions에서 첫 컴파일 성공(`assembleDebug`, 경고 0), 같은 날 회사 PC 로컬(Gradle 9.5.1 + JBR 25)에서도 테스트·APK 빌드 성공.
 - [x] 실기기 첫 실행(2026-11-25, Galaxy Z Flip6): 크래시 없음, 포그라운드 서비스(`specialUse`)·상시 알림·충전 한계 알림 동작. 전류 부호 오판을 발견해 보정기를 고쳤다(설계 메모와 실기기 보정표 참고).
 - [ ] 실기기 추가 확인: 벽 충전기(1 A 이상)로 충전 세션 한 번 끝까지 기록, 픽셀 1대, 보조배터리 1대
-- [ ] ViewModel 도입(현재 화면이 Repository/StateFlow를 직접 구독)
+- [x] ViewModel 도입(2026-11-25): 화면 5개 + Main. 충전기 이름 변경이 홈·상세에 즉시 반영되고, 건강도가 세션 변화에 따라 다시 계산되도록 Flow로 묶었다.
 - [ ] 서비스 사망 복구(WorkManager 충전 제약 작업), 배터리 최적화 제외 안내
 - [ ] 세션 CSV 내보내기, Pro 결제(Play Billing)
 - [ ] 2차: BLE 광고 기반 테크브릿지 보조배터리 자동 인식

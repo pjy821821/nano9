@@ -20,11 +20,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,9 +32,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.launch
 import kr.techbridge.battery.R
-import kr.techbridge.battery.di.AppContainer
 import kr.techbridge.battery.ui.components.Card
 import kr.techbridge.battery.ui.components.LineChart
 import kr.techbridge.battery.ui.components.Series
@@ -44,18 +41,18 @@ import kr.techbridge.battery.ui.theme.StateColors
 import kr.techbridge.battery.util.Format
 
 @Composable
-fun SessionDetailScreen(container: AppContainer, sessionId: Long, onBack: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    val session by container.repository.observeSession(sessionId).collectAsStateWithLifecycle(initialValue = null)
-    val samples by container.repository.observeSamples(sessionId).collectAsStateWithLifecycle(initialValue = emptyList())
-    val chargerName by produceState<String?>(initialValue = null, session?.chargerId) {
-        value = session?.chargerId?.let { container.repository.charger(it)?.name }
-    }
+fun SessionDetailScreen(vm: SessionDetailViewModel, onBack: () -> Unit) {
+    val state by vm.uiState.collectAsStateWithLifecycle()
+    val deleted by vm.deleted.collectAsStateWithLifecycle()
+    val samples = state.samples
+    val chargerName = state.chargerName
     var renaming by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     var draft by remember(chargerName) { mutableStateOf(chargerName ?: "") }
 
-    val s = session ?: return
+    LaunchedEffect(deleted) { if (deleted) onBack() }
+
+    val s = state.session ?: return
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
@@ -127,15 +124,8 @@ fun SessionDetailScreen(container: AppContainer, sessionId: Long, onBack: () -> 
             text = { OutlinedTextField(value = draft, onValueChange = { draft = it }, singleLine = true) },
             confirmButton = {
                 TextButton(onClick = {
-                    val name = draft.trim()
                     renaming = false
-                    if (name.isEmpty()) return@TextButton
-                    scope.launch {
-                        val existing = s.chargerId
-                        val id = if (existing != null) { container.repository.renameCharger(existing, name); existing }
-                        else container.repository.createCharger(name).also { container.repository.setCharger(s.id, it) }
-                        container.settings.setLastCharger(id)
-                    }
+                    vm.nameCharger(draft)
                 }) { Text("저장") }
             },
             dismissButton = { TextButton(onClick = { renaming = false }) { Text("취소") } },
@@ -146,7 +136,7 @@ fun SessionDetailScreen(container: AppContainer, sessionId: Long, onBack: () -> 
             onDismissRequest = { deleting = false },
             title = { Text("세션 삭제") },
             text = { Text("이 세션과 샘플이 삭제됩니다. 되돌릴 수 없습니다.") },
-            confirmButton = { TextButton(onClick = { deleting = false; scope.launch { container.repository.deleteSession(s.id); onBack() } }) { Text("삭제", color = MaterialTheme.colorScheme.error) } },
+            confirmButton = { TextButton(onClick = { deleting = false; vm.delete() }) { Text("삭제", color = MaterialTheme.colorScheme.error) } },
             dismissButton = { TextButton(onClick = { deleting = false }) { Text("취소") } },
         )
     }

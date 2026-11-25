@@ -17,6 +17,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -25,10 +27,10 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import kr.techbridge.battery.R
-import kr.techbridge.battery.di.AppContainer
 import kr.techbridge.battery.ui.chart.ChartScreen
 import kr.techbridge.battery.ui.home.HomeScreen
 import kr.techbridge.battery.ui.sessions.SessionDetailScreen
+import kr.techbridge.battery.ui.sessions.SessionDetailViewModel
 import kr.techbridge.battery.ui.sessions.SessionsScreen
 import kr.techbridge.battery.ui.settings.SettingsScreen
 
@@ -51,7 +53,7 @@ private val topLevel = listOf(
 )
 
 @Composable
-fun AppNav(container: AppContainer, requestedRoute: String?, onRouteConsumed: () -> Unit) {
+fun AppNav(viewModelFactory: ViewModelProvider.Factory, requestedRoute: String?, onRouteConsumed: () -> Unit) {
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
@@ -87,22 +89,23 @@ fun AppNav(container: AppContainer, requestedRoute: String?, onRouteConsumed: ()
         },
     ) { padding ->
         NavHost(navController = nav, startDestination = Routes.HOME, modifier = Modifier.padding(padding)) {
+            // 각 목적지의 ViewModel은 그 백스택 항목에 묶인다. 탭을 오가도 상태가 유지되고, 화면이 사라지면 정리된다.
             composable(Routes.HOME) {
                 HomeScreen(
-                    container = container,
+                    vm = viewModel(factory = viewModelFactory),
                     onOpenChart = { nav.navigate(Routes.CHART) { launchSingleTop = true } },
                     onOpenSettings = { nav.navigate(Routes.SETTINGS) { launchSingleTop = true } },
                 )
             }
-            composable(Routes.CHART) { ChartScreen(container) }
+            composable(Routes.CHART) { ChartScreen(vm = viewModel(factory = viewModelFactory)) }
             composable(Routes.SESSIONS) {
-                SessionsScreen(container, onOpenSession = { id -> nav.navigate(Routes.session(id)) })
+                SessionsScreen(vm = viewModel(factory = viewModelFactory), onOpenSession = { id -> nav.navigate(Routes.session(id)) })
             }
-            composable(Routes.SESSION, arguments = listOf(navArgument("id") { type = NavType.LongType })) { entry ->
-                val id = entry.arguments?.getLong("id") ?: return@composable
-                SessionDetailScreen(container, sessionId = id, onBack = { nav.popBackStack() })
+            composable(Routes.SESSION, arguments = listOf(navArgument(SessionDetailViewModel.ARG_ID) { type = NavType.LongType })) {
+                // 세션 id는 SessionDetailViewModel이 SavedStateHandle에서 읽는다.
+                SessionDetailScreen(vm = viewModel(factory = viewModelFactory), onBack = { nav.popBackStack() })
             }
-            composable(Routes.SETTINGS) { SettingsScreen(container) }
+            composable(Routes.SETTINGS) { SettingsScreen(vm = viewModel(factory = viewModelFactory)) }
         }
     }
 }

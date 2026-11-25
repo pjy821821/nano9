@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -18,26 +19,27 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kr.techbridge.battery.BatteryApp
-import kr.techbridge.battery.data.settings.Settings
 import kr.techbridge.battery.service.MonitorService
 import kr.techbridge.battery.ui.nav.AppNav
 import kr.techbridge.battery.ui.theme.BatteryTheme
+import kr.techbridge.battery.ui.vm.appViewModelFactory
 
 class MainActivity : ComponentActivity() {
     private var pendingRoute by mutableStateOf<String?>(null)
+    private val viewModelFactory by lazy { appViewModelFactory(BatteryApp.container(this)) }
+    private val viewModel: MainViewModel by viewModels { viewModelFactory }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         pendingRoute = intent?.getStringExtra(EXTRA_ROUTE)
-        val container = BatteryApp.container(this)
 
         setContent {
-            val settings by container.settings.flow.collectAsStateWithLifecycle(initialValue = Settings())
+            val settings by viewModel.settings.collectAsStateWithLifecycle()
             BatteryTheme(mode = settings.theme, dynamicColor = settings.dynamicColor) {
                 NotificationPermissionRequest()
                 AppNav(
-                    container = container,
+                    viewModelFactory = viewModelFactory,
                     requestedRoute = pendingRoute,
                     onRouteConsumed = { pendingRoute = null },
                 )

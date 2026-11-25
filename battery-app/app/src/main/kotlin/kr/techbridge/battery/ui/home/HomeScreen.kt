@@ -25,12 +25,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,11 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kr.techbridge.battery.R
-import kr.techbridge.battery.core.Sample
-import kr.techbridge.battery.di.AppContainer
 import kr.techbridge.battery.ui.components.BatteryRing
 import kr.techbridge.battery.ui.components.Card
 import kr.techbridge.battery.ui.components.LineChart
@@ -54,30 +47,14 @@ import kr.techbridge.battery.ui.theme.StateColors
 import kr.techbridge.battery.util.Format
 
 @Composable
-fun HomeScreen(container: AppContainer, onOpenChart: () -> Unit, onOpenSettings: () -> Unit) {
-    val live by container.live.sample.collectAsStateWithLifecycle()
-    val session by container.live.session.collectAsStateWithLifecycle()
-    val sessionId by container.live.sessionId.collectAsStateWithLifecycle()
-    val recent by container.live.recent.collectAsStateWithLifecycle()
-    val calibration by container.live.calibration.collectAsStateWithLifecycle()
-
-    // 서비스가 아직 샘플을 내놓지 않았으면 직접 한 번 읽는다.
-    val fallback by produceState<Sample?>(initialValue = null, calibration) {
-        value = container.batteryReader.read()?.let(calibration::normalize)
-    }
-    val sample = live ?: fallback
-
-    val remaining by produceState<Long?>(initialValue = null, sample?.plugged) {
-        while (true) {
-            value = if (sample?.plugged == true) container.batteryReader.deviceInfo().chargeTimeRemainingMs else null
-            delay(30_000)
-        }
-    }
-
-    val chargerName by produceState<String?>(initialValue = null, sessionId) {
-        val id = sessionId
-        value = if (id == null) null else container.db.sessionDao().get(id)?.chargerId?.let { container.repository.charger(it)?.name }
-    }
+fun HomeScreen(vm: HomeViewModel, onOpenChart: () -> Unit, onOpenSettings: () -> Unit) {
+    val state by vm.uiState.collectAsStateWithLifecycle()
+    val sample = state.sample
+    val session = state.session
+    val sessionId = state.sessionId
+    val recent = state.recent
+    val remaining = state.remainingMs
+    val chargerName = state.chargerName
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
@@ -88,7 +65,7 @@ fun HomeScreen(container: AppContainer, onOpenChart: () -> Unit, onOpenSettings:
             IconButton(onClick = onOpenSettings) { Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.nav_settings)) }
         }
 
-        ChargerCard(container = container, sessionId = sessionId, chargerName = chargerName, plugged = sample?.plugged == true)
+        ChargerCard(sessionId = sessionId, chargerName = chargerName, plugged = sample?.plugged == true, onRename = vm::nameCharger)
 
         val charging = sample?.plugged == true
         val low = !charging && (sample?.levelPercent ?: 100) <= 20
@@ -163,8 +140,7 @@ fun HomeScreen(container: AppContainer, onOpenChart: () -> Unit, onOpenSettings:
 
 /** 연결된 충전기 카드. 2차에서 보조배터리 자동 인식 카드로 교체되는 자리. */
 @Composable
-private fun ChargerCard(container: AppContainer, sessionId: Long?, chargerName: String?, plugged: Boolean) {
-    val scope = rememberCoroutineScope()
+private fun ChargerCard(sessionId: Long?, chargerName: String?, plugged: Boolean, onRename: (String) -> Unit) {
     var editing by remember { mutableStateOf(false) }
     var draft by remember(chargerName) { mutableStateOf(chargerName ?: "") }
 
@@ -197,15 +173,8 @@ private fun ChargerCard(container: AppContainer, sessionId: Long?, chargerName: 
             text = { OutlinedTextField(value = draft, onValueChange = { draft = it }, singleLine = true, label = { Text(stringResource(R.string.connected_charger)) }) },
             confirmButton = {
                 TextButton(onClick = {
-                    val name = draft.trim()
                     editing = false
-                    if (name.isEmpty()) return@TextButton
-                    scope.launch {
-                        val existing = container.db.sessionDao().get(sessionId)?.chargerId
-                        val id = if (existing != null) { container.repository.renameCharger(existing, name); existing }
-                        else container.repository.createCharger(name).also { container.repository.setCharger(sessionId, it) }
-                        container.settings.setLastCharger(id)
-                    }
+                    onRename(draft)
                 }) { Text("저장") }
             },
             dismissButton = { TextButton(onClick = { editing = false }) { Text("취소") } },
