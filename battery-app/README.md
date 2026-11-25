@@ -88,11 +88,11 @@ kr.techbridge.battery
 
 ### 실기기 보정표
 
-| 기기 | OS | CURRENT_NOW 단위 | 충전 부호 | 충전 카운터 | 사이클 수(EXTRA_CYCLE_COUNT) | 비고 |
-|---|---|---|---|---|---|---|
-| Galaxy Z Flip6 (SM-F741N) | Android 17 / One UI 9.0 | µA | + (규격) | 있음, 약 3,580 µAh 눈금 | 0 (미제공) | PC USB·화면 켬이면 순전류 -200~-400 mA. `/sys/class/power_supply`는 adb shell에서 읽기 불가 |
+| 기기 | OS | CURRENT_NOW 단위 | 충전 부호 | 충전 카운터 | 사이클 수(EXTRA_CYCLE_COUNT) | 협상 전류·전압(max_charging_*) | 비고 |
+|---|---|---|---|---|---|---|---|
+| Galaxy Z Flip6 (SM-F741N) | Android 17 / One UI 9.0 | µA | + (규격) | 있음, 약 3,580 µAh 눈금 | 0 (미제공) | 미제공(0) → 충전기 인식은 전력 매칭만 | PC USB·화면 켬이면 순전류 -200~-400 mA. `/sys/class/power_supply`는 adb shell에서 읽기 불가 |
 
-확인 방법: `adb shell dumpsys battery`의 삼성 확장 로그(`current_avg`, `cc`)와 앱 알림의 W 표시를 비교. 앱 저장값은 `adb exec-out run-as kr.techbridge.battery cat files/datastore/settings.preferences_pb | od -c`로 읽을 수 있다(`cal_scale`, `cal_flip`).
+뺐다 꽂기는 케이블 없이 `adb shell dumpsys battery unplug` → `adb shell dumpsys battery reset`으로 흉내 낼 수 있다(세션 종료·시작 테스트에 씀). 확인 방법: `adb shell dumpsys battery`의 삼성 확장 로그(`current_avg`, `cc`)와 앱 알림의 W 표시를 비교. 앱 저장값은 `adb exec-out run-as kr.techbridge.battery cat files/datastore/settings.preferences_pb | od -c`로 읽을 수 있다(`cal_scale`, `cal_flip`).
 
 ## 현재 상태와 다음 단계
 
