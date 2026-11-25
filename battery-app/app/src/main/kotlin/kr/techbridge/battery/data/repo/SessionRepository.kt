@@ -45,6 +45,25 @@ class SessionRepository(
     suspend fun recentCompleted(limit: Int = 50): List<ChargingSession> =
         sessions.recentCompleted(limit).map { it.toCore() }
 
+    /** 끝맺지 못한 세션(completed = 0). 서비스가 다시 뜰 때 이어받거나 닫는다. */
+    suspend fun openSessions(): List<SessionEntity> = sessions.open()
+
+    /** 세션의 마지막 샘플 시각. 세션 행의 endMs는 10초마다만 갱신되므로 이것이 더 정확하다. */
+    suspend fun lastSampleMs(sessionId: Long): Long? = samples.last(sessionId)?.timestampMs
+
+    /**
+     * 서비스가 죽어 끝맺지 못한 세션을 마지막 샘플 시각·잔량으로 닫는다. completed는 false로 둔다(기록 화면에 "중단"으로 보임).
+     * 샘플은 [finishSession]과 같은 규칙으로 줄인다.
+     */
+    suspend fun closeInterrupted(entity: SessionEntity) {
+        val last = samples.last(entity.id)
+        val core = entity.toCore()
+        val fixed = if (last != null && last.timestampMs > core.endMs) {
+            core.copy(endMs = last.timestampMs, endLevel = last.levelPercent)
+        } else core
+        finishSession(entity.id, fixed.copy(completed = false))
+    }
+
     suspend fun setCharger(sessionId: Long, chargerId: Long?) = sessions.setCharger(sessionId, chargerId)
     suspend fun setNote(sessionId: Long, note: String?) = sessions.setNote(sessionId, note)
     suspend fun deleteSession(id: Long) = sessions.delete(id)

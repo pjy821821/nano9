@@ -31,8 +31,11 @@ class MonitorService : LifecycleService() {
 
     override fun onCreate() {
         super.onCreate()
+        running = true
         val container = BatteryApp.container(this)
         recorder = SessionRecorder(this, container)
+        Notifications.cancel(this, Notifications.ID_RECOVERY)
+        MonitorWatchdog.schedule(this)
 
         ServiceCompat.startForeground(
             this,
@@ -64,6 +67,7 @@ class MonitorService : LifecycleService() {
     }
 
     override fun onDestroy() {
+        running = false
         loop?.cancel()
         runCatching { unregisterReceiver(powerReceiver) }
         recorder.flushBlocking()
@@ -73,11 +77,18 @@ class MonitorService : LifecycleService() {
     companion object {
         const val ACTION_STOP = "kr.techbridge.battery.action.STOP"
 
+        /** 같은 프로세스 안의 감시 작업이 서비스 생존을 확인하는 데 쓴다. 프로세스가 죽으면 당연히 false로 시작한다. */
+        @Volatile
+        var running: Boolean = false
+            private set
+
+        /** 백그라운드에서 부르면 Android 12+에서 ForegroundServiceStartNotAllowedException이 날 수 있다. 호출자가 처리한다. */
         fun start(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, MonitorService::class.java))
         }
 
         fun stop(context: Context) {
+            MonitorWatchdog.cancel(context)
             context.startService(Intent(context, MonitorService::class.java).setAction(ACTION_STOP))
         }
     }

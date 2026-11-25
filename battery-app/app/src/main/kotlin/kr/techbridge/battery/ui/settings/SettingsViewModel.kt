@@ -1,9 +1,12 @@
 package kr.techbridge.battery.ui.settings
 
+import android.os.PowerManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -36,6 +39,18 @@ class SettingsViewModel(private val c: AppContainer) : ViewModel() {
     ) { capacity, _ -> capacity }
         .map { capacity -> HealthEstimator.estimate(c.repository.recentCompleted(50), capacity) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    private val _batteryOptimizationIgnored = MutableStateFlow(readBatteryOptimization())
+    /** 이 앱이 배터리 최적화에서 제외됐는지. 제외돼야 감시 작업이 백그라운드에서 서비스를 되살릴 수 있다. */
+    val batteryOptimizationIgnored: StateFlow<Boolean> = _batteryOptimizationIgnored.asStateFlow()
+
+    /** 시스템 설정에서 돌아올 때 다시 읽는다. */
+    fun refreshBatteryOptimization() {
+        _batteryOptimizationIgnored.value = readBatteryOptimization()
+    }
+
+    private fun readBatteryOptimization(): Boolean =
+        c.appContext.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(c.appContext.packageName)
 
     fun setChargeLimit(percent: Int) = launch { c.settings.setChargeLimit(percent) }
     fun setChargeLimitEnabled(v: Boolean) = launch { c.settings.setChargeLimitEnabled(v) }

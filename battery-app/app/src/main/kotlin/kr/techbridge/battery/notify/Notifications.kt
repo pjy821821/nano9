@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 import kr.techbridge.battery.R
 import kr.techbridge.battery.core.ChargingSession
 import kr.techbridge.battery.core.Sample
+import kr.techbridge.battery.service.MonitorService
 import kr.techbridge.battery.ui.MainActivity
 import kr.techbridge.battery.util.Format
 
@@ -23,6 +24,7 @@ object Notifications {
     const val ID_ONGOING = 1
     const val ID_LIMIT = 2
     const val ID_TEMP = 3
+    const val ID_RECOVERY = 4
 
     fun ensureChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
@@ -103,6 +105,24 @@ object Notifications {
             .setAutoCancel(true)
             .setContentIntent(openApp(context, null))
             .build()
+
+    /**
+     * 서비스가 죽어 있고 백그라운드에서 되살릴 수 없을 때. 알림을 탭하면 서비스를 직접 시작한다.
+     * 알림 탭으로 보내는 PendingIntent는 백그라운드 FGS 시작 제한의 예외다.
+     */
+    fun recovery(context: Context): Notification {
+        val restart = PendingIntent.getForegroundService(
+            context, 0, Intent(context, MonitorService::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        return NotificationCompat.Builder(context, CHANNEL_ALERTS)
+            .setSmallIcon(R.drawable.ic_stat_bolt)
+            .setContentTitle(context.getString(R.string.notif_recovery_title))
+            .setContentText(context.getString(R.string.notif_recovery_text))
+            .setAutoCancel(true)
+            .setContentIntent(restart)
+            .build()
+    }
 
     fun temperature(context: Context, deciC: Int): Notification =
         NotificationCompat.Builder(context, CHANNEL_ALERTS)

@@ -35,6 +35,8 @@
     <string name="notif_limit_text">배터리 수명을 위해 지금 분리하는 것이 좋습니다</string>
     <string name="notif_temp_title">배터리 온도 %1$s °C</string>
     <string name="notif_temp_text">충전을 잠시 멈추거나 케이스를 벗겨 주세요</string>
+    <string name="notif_recovery_title">충전 모니터링이 중단됐습니다</string>
+    <string name="notif_recovery_text">탭하면 다시 시작합니다. 설정에서 배터리 최적화를 제외하면 자동으로 복구됩니다.</string>
     <string name="action_open_chart">그래프 열기</string>
 
     <string name="settings_notifications">알림</string>
@@ -44,6 +46,10 @@
     <string name="settings_ongoing">충전 중 상시 알림</string>
     <string name="settings_monitoring">백그라운드 모니터링</string>
     <string name="settings_monitoring_desc">꽂으면 자동으로 세션을 기록합니다. 끄면 앱을 열어 둔 동안만 측정합니다.</string>
+    <string name="settings_battery_opt">배터리 최적화 제외</string>
+    <string name="settings_battery_opt_ok">제외됨. 절전 기능이 서비스를 꺼도 충전 중 15분 안에 자동으로 다시 시작합니다.</string>
+    <string name="settings_battery_opt_warn">제외되지 않음. 절전 기능이 서비스를 끄면 자동 복구가 막혀 알림을 탭해야 합니다. 설정에서 이 앱을 "제한 없음"으로 두세요.</string>
+    <string name="settings_open_system">설정 열기</string>
     <string name="settings_measurement">측정</string>
     <string name="settings_calibration">전류 단위·부호 보정</string>
     <string name="settings_recalibrate">재보정</string>

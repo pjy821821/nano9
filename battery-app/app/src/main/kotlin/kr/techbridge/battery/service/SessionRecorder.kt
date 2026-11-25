@@ -53,9 +53,35 @@ class SessionRecorder(private val context: Context, private val c: AppContainer)
                 c.live.setCalibration(calibration)
             }
         }
+        recoverOrphans()
         while (currentCoroutineContext().isActive) {
             val plugged = sampleNow()
             delay(if (plugged) PLUGGED_INTERVAL_MS else UNPLUGGED_INTERVAL_MS)
+        }
+    }
+
+    /**
+     * 서비스가 죽었다 살아난 뒤 처리. 끝맺지 못한 세션 중 가장 최근 것이, 아직 꽂혀 있고 마지막 기록이
+     * 간격 허용치 안이면 트래커에 이어받아 세션 하나로 유지한다. 나머지는 마지막 샘플 시각으로 닫는다.
+     */
+    private suspend fun recoverOrphans() = mutex.withLock {
+        val open = c.repository.openSessions()
+        if (open.isEmpty()) return@withLock
+        val plugged = c.batteryReader.read()?.plugged == true
+        val now = System.currentTimeMillis()
+        val latest = open.last()
+        val latestLastMs = maxOf(latest.endMs, c.repository.lastSampleMs(latest.id) ?: Long.MIN_VALUE)
+        val resumable = plugged && now - latestLastMs <= SessionTracker.DEFAULT_GAP_TOLERANCE_MS
+
+        for (entity in open) {
+            if (resumable && entity.id == latest.id) {
+                val snapshot = entity.toCore().let { if (latestLastMs > it.endMs) it.copy(endMs = latestLastMs) else it }
+                tracker.resume(snapshot)
+                sessionId = entity.id
+                lastSessionWriteMs = now
+            } else {
+                c.repository.closeInterrupted(entity)
+            }
         }
     }
 
