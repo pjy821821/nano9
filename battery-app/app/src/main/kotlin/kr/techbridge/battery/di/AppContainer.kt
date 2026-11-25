@@ -50,5 +50,8 @@ class LiveBatteryState {
 
     fun setCalibration(c: Calibration) { _calibration.value = c }
 
+    /** 화면(홈 ViewModel 등)이 실시간 샘플을 구독 중인가. 뺀 상태의 샘플링 간격을 정할 때 쓴다. */
+    val uiWatching: Boolean get() = _sample.subscriptionCount.value > 0
+
     companion object { const val RECENT_CAPACITY = 600 }
 }
