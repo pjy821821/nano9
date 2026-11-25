@@ -43,6 +43,11 @@ class SessionRepository(
     /** 이름 붙인 충전기 전체(자동 인식 후보). */
     suspend fun knownChargers(): List<KnownCharger> = chargers.all().map { it.toKnown() }
 
+    // CSV 내보내기용 일괄 조회
+    suspend fun allSessions(): List<SessionEntity> = sessions.all()
+    suspend fun chargerNames(): Map<Long, String> = chargers.all().associate { it.id to it.name }
+    suspend fun samplesOf(sessionId: Long): List<SampleEntity> = samples.forSession(sessionId)
+
     suspend fun addSample(sessionId: Long, sample: Sample) {
         samples.insert(SampleEntity.from(sessionId, sample))
     }

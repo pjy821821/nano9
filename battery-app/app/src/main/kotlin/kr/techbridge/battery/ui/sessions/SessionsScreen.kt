@@ -1,5 +1,8 @@
 package kr.techbridge.battery.ui.sessions
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,15 +19,19 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -47,13 +54,27 @@ fun SessionsScreen(vm: SessionsViewModel, onOpenSession: (Long) -> Unit) {
     val today = state.today
     val grouped = state.byDate
 
+    val context = LocalContext.current
+    // 파일 만들기 대화상자(저장소 접근 프레임워크). 권한이 필요 없고 사용자가 위치를 고른다.
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri != null) vm.exportSessions(uri)
+    }
+    LaunchedEffect(Unit) { vm.events.collect { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() } }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item {
-            Text(stringResource(R.string.nav_sessions), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
+            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.nav_sessions), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                if (sessions.isNotEmpty()) {
+                    IconButton(onClick = { exportLauncher.launch("battery-sessions-${LocalDate.now()}.csv") }) {
+                        Icon(Icons.Filled.Download, contentDescription = stringResource(R.string.export_csv))
+                    }
+                }
+            }
         }
         item { WeekSummary(thisWeek) }
         if (sessions.isEmpty()) {

@@ -95,6 +95,12 @@ data class SampleEntity(
 ) {
     val powerMw: Double get() = voltageMv.toDouble() * currentUa.toDouble() / 1_000_000.0
 
+    /** 세션 안의 샘플은 항상 꽂힌 상태였으므로 plugged/charging은 true로 둔다. CSV 내보내기용. */
+    fun toCore() = Sample(
+        timestampMs = timestampMs, levelPercent = levelPercent, voltageMv = voltageMv, currentUa = currentUa,
+        temperatureDeciC = temperatureDeciC, plugged = true, charging = true,
+    )
+
     companion object {
         fun from(sessionId: Long, s: Sample) = SampleEntity(
             sessionId = sessionId, timestampMs = s.timestampMs, levelPercent = s.levelPercent,
