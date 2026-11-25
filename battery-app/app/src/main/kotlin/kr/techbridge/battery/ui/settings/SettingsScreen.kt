@@ -23,9 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,32 +32,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.launch
 import kr.techbridge.battery.R
 import kr.techbridge.battery.core.Calibration
-import kr.techbridge.battery.core.HealthEstimator
-import kr.techbridge.battery.data.battery.DeviceBatteryInfo
 import kr.techbridge.battery.data.battery.HealthLabel
-import kr.techbridge.battery.data.settings.Settings
 import kr.techbridge.battery.data.settings.ThemeMode
-import kr.techbridge.battery.di.AppContainer
-import kr.techbridge.battery.service.MonitorService
 import kr.techbridge.battery.ui.components.Card
 import kr.techbridge.battery.ui.components.SectionLabel
 import kr.techbridge.battery.util.Format
 import java.util.Locale
 
 @Composable
-fun SettingsScreen(container: AppContainer) {
-    val scope = rememberCoroutineScope()
-    val settings by container.settings.flow.collectAsStateWithLifecycle(initialValue = Settings())
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val store = container.settings
-
-    val device by produceState<DeviceBatteryInfo?>(initialValue = null) { value = container.batteryReader.deviceInfo() }
-    val health by produceState<HealthEstimator.Estimate?>(initialValue = null, settings.designCapacityMah) {
-        value = HealthEstimator.estimate(container.repository.recentCompleted(50), settings.designCapacityMah)
-    }
+fun SettingsScreen(vm: SettingsViewModel) {
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    val device by vm.device.collectAsStateWithLifecycle()
+    val health by vm.health.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
@@ -74,29 +60,24 @@ fun SettingsScreen(container: AppContainer) {
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(stringResource(R.string.settings_charge_limit), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                         Text("${settings.chargeLimitPercent}%", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                        Switch(checked = settings.chargeLimitEnabled, onCheckedChange = { v -> scope.launch { store.setChargeLimitEnabled(v) } }, modifier = Modifier.padding(start = 12.dp))
+                        Switch(checked = settings.chargeLimitEnabled, onCheckedChange = vm::setChargeLimitEnabled, modifier = Modifier.padding(start = 12.dp))
                     }
                     var sliderValue by remember(settings.chargeLimitPercent) { mutableStateOf(settings.chargeLimitPercent.toFloat()) }
                     Slider(
                         value = sliderValue,
                         onValueChange = { sliderValue = it },
-                        onValueChangeFinished = { scope.launch { store.setChargeLimit((sliderValue / 5).toInt() * 5) } },
+                        onValueChangeFinished = { vm.setChargeLimit((sliderValue / 5).toInt() * 5) },
                         valueRange = 50f..100f, steps = 9,
                         enabled = settings.chargeLimitEnabled,
                     )
                     Text(stringResource(R.string.settings_charge_limit_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 HorizontalDivider()
-                SwitchRow(stringResource(R.string.settings_temp_warn), "${Format.celsius(settings.tempWarnDeciC)} °C 이상이면 알림", settings.tempWarnEnabled) { v -> scope.launch { store.setTempWarnEnabled(v) } }
+                SwitchRow(stringResource(R.string.settings_temp_warn), "${Format.celsius(settings.tempWarnDeciC)} °C 이상이면 알림", settings.tempWarnEnabled, vm::setTempWarnEnabled)
                 HorizontalDivider()
-                SwitchRow(stringResource(R.string.settings_ongoing), "전력·잔량·남은 시간을 알림에 표시", settings.ongoingNotification) { v -> scope.launch { store.setOngoingNotification(v) } }
+                SwitchRow(stringResource(R.string.settings_ongoing), "전력·잔량·남은 시간을 알림에 표시", settings.ongoingNotification, vm::setOngoingNotification)
                 HorizontalDivider()
-                SwitchRow(stringResource(R.string.settings_monitoring), stringResource(R.string.settings_monitoring_desc), settings.monitoringEnabled) { v ->
-                    scope.launch {
-                        store.setMonitoringEnabled(v)
-                        if (v) MonitorService.start(context) else MonitorService.stop(context)
-                    }
-                }
+                SwitchRow(stringResource(R.string.settings_monitoring), stringResource(R.string.settings_monitoring_desc), settings.monitoringEnabled, vm::setMonitoringEnabled)
             }
         }
 
@@ -108,7 +89,7 @@ fun SettingsScreen(container: AppContainer) {
                         Text(stringResource(R.string.settings_calibration), style = MaterialTheme.typography.bodyLarge)
                         Text(calibrationLabel(settings.calibration, settings.calibrationCheckedMs), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    OutlinedButton(onClick = { scope.launch { store.setCalibration(null) } }) { Text(stringResource(R.string.settings_recalibrate)) }
+                    OutlinedButton(onClick = vm::recalibrate) { Text(stringResource(R.string.settings_recalibrate)) }
                 }
                 HorizontalDivider()
                 Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -119,7 +100,7 @@ fun SettingsScreen(container: AppContainer) {
                     var capacity by remember(settings.designCapacityMah) { mutableStateOf(settings.designCapacityMah?.toString() ?: "") }
                     OutlinedTextField(
                         value = capacity,
-                        onValueChange = { v -> capacity = v.filter { it.isDigit() }.take(6); scope.launch { store.setDesignCapacity(capacity.toIntOrNull()) } },
+                        onValueChange = { v -> capacity = v.filter { it.isDigit() }.take(6); vm.setDesignCapacity(capacity.toIntOrNull()) },
                         singleLine = true, modifier = Modifier.width(110.dp),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     )
@@ -138,14 +119,14 @@ fun SettingsScreen(container: AppContainer) {
                         modes.forEachIndexed { i, mode ->
                             SegmentedButton(
                                 selected = settings.theme == mode,
-                                onClick = { scope.launch { store.setTheme(mode) } },
+                                onClick = { vm.setTheme(mode) },
                                 shape = SegmentedButtonDefaults.itemShape(index = i, count = modes.size),
                             ) { Text(stringResource(labels[i])) }
                         }
                     }
                 }
                 HorizontalDivider()
-                SwitchRow(stringResource(R.string.settings_dynamic_color), "월페이퍼 색을 따라갑니다", settings.dynamicColor) { v -> scope.launch { store.setDynamicColor(v) } }
+                SwitchRow(stringResource(R.string.settings_dynamic_color), "월페이퍼 색을 따라갑니다", settings.dynamicColor, vm::setDynamicColor)
             }
         }
 

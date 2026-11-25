@@ -14,6 +14,8 @@ import kr.techbridge.battery.data.settings.SettingsStore
 
 /** 수동 DI. 앱 규모가 작아 DI 프레임워크를 쓰지 않는다. */
 class AppContainer(context: Context) {
+    /** 서비스 시작처럼 ViewModel이 일으키는 부수 효과용. 액티비티 컨텍스트를 잡지 않도록 application 컨텍스트만 둔다. */
+    val appContext: Context = context.applicationContext
     val db: BatteryDatabase = BatteryDatabase.build(context)
     val settings = SettingsStore(context)
     val batteryReader = BatteryReader(context)

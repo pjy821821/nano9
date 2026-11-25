@@ -64,10 +64,13 @@ kr.techbridge.battery
 ├── service/BootReceiver     부팅 후 서비스 재시작
 ├── notify/Notifications     상시 알림, 충전 한계·온도 경고
 ├── widget/BatteryWidget     Glance 위젯 (2×2, 4×2)
-└── ui/                      MainActivity, 테마, 내비게이션, 5개 화면, 공용 컴포넌트(BatteryRing, LineChart)
+├── ui/vm/AppViewModelFactory  모든 ViewModel을 AppContainer로 만드는 viewModelFactory
+└── ui/                      MainActivity(+MainViewModel: 테마), 내비게이션, 화면 5개(각각 Screen + ViewModel), 공용 컴포넌트(BatteryRing, LineChart)
 ```
 
-데이터 흐름: `BatteryReader.read()` → `Calibration.normalize()` → `SessionTracker.onSample()` → `SessionRepository` + `LiveBatteryState` → Compose 화면 / 위젯 / 알림.
+데이터 흐름: `BatteryReader.read()` → `Calibration.normalize()` → `SessionTracker.onSample()` → `SessionRepository` + `LiveBatteryState` → ViewModel(`StateFlow<UiState>`) → Compose 화면 / 위젯 / 알림.
+
+화면 계층 규칙: Composable은 `vm.uiState`만 구독하고 사용자 동작은 `vm.xxx()`로 넘긴다. Repository·DataStore·BatteryReader에 직접 닿지 않는다. ViewModel은 `AppNav`의 각 목적지에서 `viewModel(factory = …)`로 만들어 그 백스택 항목에 묶이고, 세션 상세의 id는 `SavedStateHandle`에서 읽는다. 서비스 시작·중지 같은 부수 효과는 ViewModel이 `AppContainer.appContext`로 처리한다.
 
 ## 설계 메모
 
@@ -75,6 +78,7 @@ kr.techbridge.battery
 - **공급 부족 표시**: 꽂혀 있는데 순전류가 음수면 알림·홈·위젯에 "충전 중"이 아니라 "공급 부족 · 배터리 소모 중"으로 표시한다. 세션 적분은 원래부터 양의 전류만 더하므로 영향이 없다.
 - **배터리 측 전력**: 표시하는 W는 전압 × 전류로, 어댑터 표기보다 10~30% 낮다. 홈 화면에 항상 그 설명을 붙인다.
 - **세션**: 꽂힌 샘플에서 시작, 뺀 샘플에서 종료. 꽂힌 상태에서 5분 넘게 샘플이 끊기면 서비스 사망으로 보고 미완료 세션으로 닫고 새로 시작.
+- **샘플 보관**: 세션이 끝나면 1초 샘플을 10초 간격으로 줄인다(`SampleThinning`, 첫·마지막 샘플 유지). 2026-11-25 실기기에서 `Long.MIN_VALUE` 오버플로로 마지막 1개만 남는 버그를 찾아 순수 함수로 빼고 테스트를 붙였다. 그 전에 끝난 세션은 샘플이 1개뿐이다.
 - **건강도**: 잔량 변화 60% 이상인 완료 세션 3개 이상이 있을 때만 중앙값과 사분위 범위로 표시. OS가 사이클 수·건강 등급을 주면 나란히 표시.
 - **포그라운드 서비스**: Android 14는 타입 선언이 필수인데 배터리 모니터용 타입이 없어 `specialUse`. 매니페스트 `PROPERTY_SPECIAL_USE_FGS_SUBTYPE`에 용도를 적었고, Play 콘솔 정책 > 앱 콘텐츠에도 같은 내용을 제출해야 한다.
 - **백그라운드 시작 제약**: `ACTION_POWER_CONNECTED`는 매니페스트 등록이 안 된다. 서비스를 START_STICKY로 유지하고, 앱 실행과 부팅 시 시작한다. 서비스가 죽은 뒤 자동 복구(WorkManager 등)는 다음 단계.
@@ -89,11 +93,11 @@ kr.techbridge.battery
 
 ## 현재 상태와 다음 단계
 
-- [x] core 모듈: 구현 + 단위 테스트 30개 통과(보정기 부호 판정 8개 추가)
+- [x] core 모듈: 구현 + 단위 테스트 35개 통과(보정기 부호 판정 8개, 샘플 다운샘플 5개 추가)
 - [x] app 모듈: 전체 골격 작성. 2026-11-24 GitHub Actions에서 첫 컴파일 성공(`assembleDebug`, 경고 0), 같은 날 회사 PC 로컬(Gradle 9.5.1 + JBR 25)에서도 테스트·APK 빌드 성공.
 - [x] 실기기 첫 실행(2026-11-25, Galaxy Z Flip6): 크래시 없음, 포그라운드 서비스(`specialUse`)·상시 알림·충전 한계 알림 동작. 전류 부호 오판을 발견해 보정기를 고쳤다(설계 메모와 실기기 보정표 참고).
 - [ ] 실기기 추가 확인: 벽 충전기(1 A 이상)로 충전 세션 한 번 끝까지 기록, 픽셀 1대, 보조배터리 1대
-- [ ] ViewModel 도입(현재 화면이 Repository/StateFlow를 직접 구독)
+- [x] ViewModel 도입(2026-11-25): 화면 5개 + Main. 충전기 이름 변경이 홈·상세에 즉시 반영되고, 건강도가 세션 변화에 따라 다시 계산되도록 Flow로 묶었다.
 - [ ] 서비스 사망 복구(WorkManager 충전 제약 작업), 배터리 최적화 제외 안내
 - [ ] 세션 CSV 내보내기, Pro 결제(Play Billing)
 - [ ] 2차: BLE 광고 기반 테크브릿지 보조배터리 자동 인식

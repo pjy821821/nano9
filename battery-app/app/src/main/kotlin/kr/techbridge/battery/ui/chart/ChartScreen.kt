@@ -17,9 +17,6 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -28,7 +25,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kr.techbridge.battery.R
-import kr.techbridge.battery.di.AppContainer
 import kr.techbridge.battery.ui.components.Card
 import kr.techbridge.battery.ui.components.LineChart
 import kr.techbridge.battery.ui.components.Series
@@ -36,19 +32,13 @@ import kr.techbridge.battery.ui.components.Stat
 import kr.techbridge.battery.ui.theme.StateColors
 import kr.techbridge.battery.util.Format
 
-private val RANGES_MS = listOf(60_000L, 600_000L, Long.MAX_VALUE)
-private val RANGE_LABELS = listOf("60초", "10분", "전체")
-
 @Composable
-fun ChartScreen(container: AppContainer) {
-    val recent by container.live.recent.collectAsStateWithLifecycle()
-    val session by container.live.session.collectAsStateWithLifecycle()
-    val latest = recent.lastOrNull()
-    var rangeIndex by remember { mutableIntStateOf(0) }
-
-    val window = RANGES_MS[rangeIndex]
-    val cutoff = latest?.timestampMs?.let { if (window == Long.MAX_VALUE) Long.MIN_VALUE else it - window } ?: Long.MIN_VALUE
-    val shown = recent.filter { it.timestampMs >= cutoff }
+fun ChartScreen(vm: ChartViewModel) {
+    val state by vm.uiState.collectAsStateWithLifecycle()
+    val shown = state.shown
+    val latest = state.latest
+    val session = state.session
+    val rangeIndex = state.rangeIndex
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
@@ -65,11 +55,11 @@ fun ChartScreen(container: AppContainer) {
         }
 
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            RANGE_LABELS.forEachIndexed { i, label ->
+            ChartViewModel.RANGE_LABELS.forEachIndexed { i, label ->
                 SegmentedButton(
                     selected = rangeIndex == i,
-                    onClick = { rangeIndex = i },
-                    shape = SegmentedButtonDefaults.itemShape(index = i, count = RANGE_LABELS.size),
+                    onClick = { vm.setRange(i) },
+                    shape = SegmentedButtonDefaults.itemShape(index = i, count = ChartViewModel.RANGE_LABELS.size),
                 ) { Text(label) }
             }
         }
