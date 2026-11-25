@@ -25,7 +25,8 @@ class MonitorService : LifecycleService() {
 
     private val powerReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            lifecycleScope.launch { recorder.sampleNow() }
+            // 루프를 깨워 즉시 샘플링하게 한다. 직접 sampleNow()를 부르면 루프와 겹쳐 두 번 샘플링하고 간격도 어긋난다.
+            recorder.kick()
         }
     }
 
