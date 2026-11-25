@@ -2,6 +2,7 @@ package kr.techbridge.battery.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -147,11 +148,15 @@ fun SettingsScreen(vm: SettingsViewModel) {
                     val labels = listOf(R.string.theme_system, R.string.theme_light, R.string.theme_dark, R.string.theme_amoled)
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                         modes.forEachIndexed { i, mode ->
+                            // 네 칸에 "AMOLED"를 넣으려면 체크 아이콘(선택은 배경색으로 구분)과 기본 좌우 여백 12dp를 줄여야 한다.
+                            // 그러지 않으면 선택 시 두 줄로 꺾이거나 마지막 글자가 잘린다(실기기 캡처로 확인).
                             SegmentedButton(
                                 selected = settings.theme == mode,
                                 onClick = { vm.setTheme(mode) },
                                 shape = SegmentedButtonDefaults.itemShape(index = i, count = modes.size),
-                            ) { Text(stringResource(labels[i])) }
+                                icon = {},
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 10.dp),
+                            ) { Text(stringResource(labels[i]), maxLines = 1, softWrap = false) }
                         }
                     }
                 }
