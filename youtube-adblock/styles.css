@@ -1,0 +1,43 @@
+/* 유튜브 광고 차단 (TechBridge)
+   content.js가 html[data-tb-ytab="on"]을 붙여 두면 광고 요소를 즉시 숨긴다.
+   (스크립트가 DOM에서 지우기 전까지 깜빡임을 막는 용도) */
+
+html[data-tb-ytab="on"] .ytp-ad-overlay-container,
+html[data-tb-ytab="on"] .ytp-ad-text-overlay,
+html[data-tb-ytab="on"] .ytp-ad-image-overlay,
+html[data-tb-ytab="on"] .ytp-ad-action-interstitial,
+html[data-tb-ytab="on"] .ytp-ad-player-overlay-layout,
+html[data-tb-ytab="on"] .ytp-paid-content-overlay,
+html[data-tb-ytab="on"] #player-ads,
+html[data-tb-ytab="on"] #masthead-ad,
+html[data-tb-ytab="on"] ytd-ad-slot-renderer,
+html[data-tb-ytab="on"] ytd-display-ad-renderer,
+html[data-tb-ytab="on"] ytd-in-feed-ad-layout-renderer,
+html[data-tb-ytab="on"] ytd-banner-promo-renderer,
+html[data-tb-ytab="on"] ytd-statement-banner-renderer,
+html[data-tb-ytab="on"] ytd-promoted-sparkles-web-renderer,
+html[data-tb-ytab="on"] ytd-promoted-sparkles-text-search-renderer,
+html[data-tb-ytab="on"] ytd-compact-promoted-video-renderer,
+html[data-tb-ytab="on"] ytd-promoted-video-renderer,
+html[data-tb-ytab="on"] ytd-video-masthead-ad-v3-renderer,
+html[data-tb-ytab="on"] ytd-primetime-promo-renderer,
+html[data-tb-ytab="on"] ytd-merch-shelf-renderer,
+html[data-tb-ytab="on"] ytd-player-legacy-desktop-watch-ads-renderer,
+html[data-tb-ytab="on"] ytd-rich-item-renderer:has(ytd-ad-slot-renderer),
+html[data-tb-ytab="on"] ytd-rich-item-renderer:has(ytd-display-ad-renderer),
+html[data-tb-ytab="on"] ytd-reel-video-renderer:has(ytd-ad-slot-renderer),
+html[data-tb-ytab="on"] ytm-promoted-video-renderer,
+html[data-tb-ytab="on"] ytm-companion-ad-renderer,
+html[data-tb-ytab="on"] ytm-promoted-sparkles-web-renderer,
+html[data-tb-ytab="on"] .ytm-companion-slot,
+html[data-tb-ytab="on"] ytmusic-mealbar-promo-renderer,
+html[data-tb-ytab="on"] ytmusic-statement-banner-renderer,
+html[data-tb-ytab="on"] ytd-enforcement-message-view-model,
+html[data-tb-ytab="on"] tp-yt-paper-dialog:has(ytd-enforcement-message-view-model) {
+  display: none !important;
+}
+
+/* 광고 재생 중에는 광고 화면 대신 검은 화면만 잠깐 보이게 */
+html[data-tb-ytab="on"] .html5-video-player.ad-showing video {
+  visibility: hidden !important;
+}

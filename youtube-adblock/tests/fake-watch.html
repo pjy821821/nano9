@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head><meta charset="UTF-8"><title>가짜 유튜브 보기 페이지</title></head>
+<body>
+  <div id="masthead-ad">마스트헤드 광고</div>
+
+  <div id="movie_player" class="html5-video-player ad-showing">
+    <video id="v" src="/ad.mp4" autoplay muted></video>
+    <div class="ytp-ad-overlay-container">오버레이 광고</div>
+    <button class="ytp-ad-skip-button">광고 건너뛰기</button>
+  </div>
+
+  <ytd-rich-grid-renderer>
+    <ytd-rich-item-renderer id="normal-item"><span>일반 영상</span></ytd-rich-item-renderer>
+    <ytd-rich-item-renderer id="ad-item"><ytd-ad-slot-renderer>피드 광고</ytd-ad-slot-renderer></ytd-rich-item-renderer>
+  </ytd-rich-grid-renderer>
+
+  <ytd-popup-container>
+    <tp-yt-paper-dialog id="enf-dialog"><ytd-enforcement-message-view-model>광고 차단기는 허용되지 않습니다</ytd-enforcement-message-view-model></tp-yt-paper-dialog>
+    <tp-yt-iron-overlay-backdrop></tp-yt-iron-overlay-backdrop>
+  </ytd-popup-container>
+
+  <script>
+    // 유튜브 플레이어 흉내: 광고 영상이 끝나거나 건너뛰기를 누르면 광고 상태 해제
+    window.__log = [];
+    const player = document.getElementById('movie_player');
+    const video = document.getElementById('v');
+    function endAd(why) {
+      if (!player.classList.contains('ad-showing')) return;
+      window.__log.push('ad-ended:' + why);
+      player.classList.remove('ad-showing');
+      player.querySelector('.ytp-ad-skip-button')?.remove();
+      video.src = '/ad.mp4'; // 본 영상으로 교체했다고 가정
+      video.play().catch(() => {});
+    }
+    // ?v=noskip 이면 건너뛰기 불가 광고 흉내 (버튼 없음)
+    if (location.search.includes('noskip')) document.querySelector('.ytp-ad-skip-button').remove();
+    document.querySelector('.ytp-ad-skip-button')?.addEventListener('click', () => endAd('skip-click'));
+    window.__t0 = performance.now();
+    video.addEventListener('ended', () => window.__log.push('elapsed-ms:' + Math.round(performance.now() - window.__t0)));
+    video.addEventListener('ended', () => endAd('video-ended'));
+    video.addEventListener('seeking', () => window.__log.push('seek:' + video.currentTime.toFixed(2) + '/dur=' + video.duration + '/rs=' + video.readyState + '/rate=' + video.playbackRate));
+  </script>
+</body>
+</html>
